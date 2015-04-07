@@ -1,6 +1,6 @@
 # Introduction
 
-MathLine is a **Math**ematica command **Line** front end to the Mathematica kernel. The front end has feature parity with the textual front end that ships with Mathematica. It uses WSTP, the new name for Wolfram's MathLink as of Mathematica 10. This project is an adaptation of [MathLinkBridge](https://github.com/rljacobson/MathLinkBridge) to use WSTP by changing a small number of ML's to WS's.
+MathLine is a **Math**ematica command **Line** front end to the Mathematica kernel. The front end has feature parity with the textual front end that ships with Mathematica. It uses WSTP, the new name for Wolfram's MathLink as of Mathematica 10. This project subsumes [MathLinkBridge](https://github.com/rljacobson/MathLinkBridge), selecting MathLink or WSTP at build time.
 
 # Usage
 
@@ -30,8 +30,10 @@ Boost (boost::program_options) is used to parse the command line options. This d
 
 Those users with cmake on their system can optionally use cmake to build the project instead of trying to determine the magic build incantation themselves, but cmake is not a dependency strictly speaking. 
 
+You will need a functional installation of Mathematica. To build MathLine, your Mathematica installation must include the WSTP or MathLink DeveloperKit. (By default, Mathematica installs both.)
+
 # Building
-If you have cmake on your system, the project includes cmake files that do all of the hard stuff for you. On unix-like systems, you would do something like the following in the root directory of the project:
+Math sure that Mathematica is installed on the build system (including the WSTP/MathLink DeveloperKit). If you have CMake on your system, the project includes cmake files that do all of the hard stuff for you. On unix-like systems, you would do something like the following in the root directory of the project:
 
 ```
 mkdir build
@@ -39,9 +41,9 @@ cd build
 cmake -Wno-dev ../../MathLine
 make
 ```
-The `-Wno-dev` is optional. If all goes well you should have a MathLine binary sitting in the build directory.
+The `-Wno-dev` is optional. CMake will select WSTP or MathLink automatically. If all goes well you should have a MathLine binary sitting in the build directory.
 
-If you don't have cmake, basically build it like any other WSTP C/C++ program: Make sure `wstp.h` (shipped with Mathematica) is available in your include search path and link the binary to Mathematica's WSTP library (`libWSTPi4.a` on my system). Of course the Boost headers should also be available to the compiler.
+If you don't have cmake and want to build it the hard way, first copy the files from `src/WSTP` into `src`. (Adapt these instructions in the obvious way for MathLink.) Then basically build it like any other WSTP C/C++ program: Make sure `wstp.h` (shipped with Mathematica) is available in your include search path and link the binary to Mathematica's WSTP library (`libWSTPi4.a` on my system). Of course the Boost headers should also be available to the compiler.
 
 # Missing Features
 For those looking to enhance this code, here are some possibilities. These are features that the textual interface doesn't have but should. Someone should contribute the code.

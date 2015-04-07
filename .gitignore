@@ -1,3 +1,4 @@
 wstp.h
 *.a
 build
+.idea
