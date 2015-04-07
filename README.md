@@ -21,7 +21,7 @@ MathLine is a **Math**ematica command **Line** front end to the Mathematica kern
 # Features
 * Optionally bypass the Main Loop.
 * Configurable prompts.
-* Readline-like text input (uses [http://github.com/antirez/linenoise](linenoise)), which means command history and emacs-style editing.
+* Readline-like text input (uses [linenoise](http://github.com/antirez/linenoise)), which means command history and emacs-style editing.
 * Automatic collection of postscript code produced by the kernel for the output of graphics, say, using xpdf.
 * Open source, BSD licensed.
 
