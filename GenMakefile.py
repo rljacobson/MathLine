@@ -30,6 +30,9 @@ $(EXECUTABLE): $(OBJECTS)
 
 .c.o:
 \t$(CC) $(CFLAGS) $< -o $@
+
+clean:
+\t./GenMakefile.py -clean
 """
 
 cpp_compiler = "g++"    # Files with a .cpp extension are compiled as c++ files.
@@ -39,9 +42,9 @@ tmp_path = "build"      # We build everything in a build directory.
 output_path = "build"   # If empty, we use the tmp_path directory.
 output_file = "MathLine"
 source_files = [
-    "src/main.cpp",
-    "src/mlbridge.cpp",
-    "src/linenoise.c"
+    "main.cpp",
+    "mlbridge.cpp",
+    "linenoise.c"
 ]
 
 # Absolute path to Mathematica installation directory. We determine this
@@ -75,54 +78,46 @@ link_libs = ["boost_program_options"]
 other_link_flags = []
 
 # Any other flags to pass to the compilers. Why not -O2?
-other_compiler_flags = ["-O2", "-c"]
+other_compiler_flags = ["-O2", "-c", "-w"]
 
 # List of object files. This is populated using the list of source files,
 # so there is no need to specify them explicitly.
 object_files = []
+
+# Convenience function, does what it says.
+def deleteFileIfExists(file):
+    try:
+        os.remove(file)
+    except:
+        pass
 
 # Wipes everything this script has created.
 def clean(remove_binary = False):
     global tmp_path
 
     # Remove any .m files that may be around.
-    try:
-        os.remove(tmp_path + "/" + "MMACommand.m")
-    except:
-        pass
-
-    # Reset the src/ directory to its original state.
-    try:
-        os.remove("src/mlbridge.h")
-        os.remove("src/mlbridge.cpp")
-    except:
-        pass
+    deleteFileIfExists(tmp_path + "/" + "MMACommand.m")
 
     # Delete the generated Makefile.
-    try:
-        os.remove("Makefile")
-    except:
-        pass
+    deleteFileIfExists("Makefile")
 
     # Remove the binary if we were asked to.
     if remove_binary:
-        try:
-            os.remove(tmp_path + "/" + output_file)
-        except:
-            pass
+        deleteFileIfExists(tmp_path + "/" + output_file)
 
-    # Delete object files.
+    # Delete object files and the copies of the source files we made.
     for file in source_files:
         short_name = ""
         if file[-2:] == ".c":
             short_name = file[:-2]
         else:
             short_name = file[:-4]
-        # Remove the file.
-        try:
-            os.remove(short_name + ".o")
-        except:
-            pass
+        # Remove the object file.
+        deleteFileIfExists(tmp_path + "/" + short_name + ".o")
+        # Remove the source file...
+        deleteFileIfExists(tmp_path + "/" + file)
+        # ...and header.
+        deleteFileIfExists(tmp_path + "/" + short_name + ".h")
 
 # Gets the directory of the Mathematica installation, sets the values of
 # mma_install_path, wstp_path, library_path, and include_path.
@@ -220,7 +215,10 @@ def main():
         clean(remove_binary=True)
         return
 
-    print "Temp path: " + tmp_path
+    # Set up build directory.
+    print "Build directory: " + tmp_path
+    if not os.path.exists(tmp_path):
+        os.makedirs(tmp_path)
 
     # Now we ask Mathematica where it is installed.
     try:
@@ -231,19 +229,22 @@ def main():
         clean()
         return
 
-    print "MMA Install Path: " + mma_install_path
-    print "Library Path: " + library_path
-    print "Include Path: " + include_path
+    print "Mathematica directory: " + mma_install_path
+    # print "Library Path: " + library_path
+    # print "Include Path: " + include_path
 
+    # Copy sources to the tmp_path directory.
     if wstp:
         print "Using WSTP."
-        shutil.copy("src/WSTP/mlbridge.cpp", "src/mlbridge.cpp")
-        shutil.copy("src/WSTP/mlbridge.h", "src/mlbridge.h")
+        shutil.copy("src/WSTP/mlbridge.cpp", tmp_path + "/mlbridge.cpp")
+        shutil.copy("src/WSTP/mlbridge.h",  tmp_path + "/mlbridge.h")
     else:
         print "Using MathLink."
-        shutil.copy("src/MathLink/mlbridge.cpp", "src/mlbridge.cpp")
-        shutil.copy("src/MathLink/mlbridge.h", "src/mlbridge.h")
-
+        shutil.copy("src/MathLink/mlbridge.cpp",  tmp_path + "/mlbridge.cpp")
+        shutil.copy("src/MathLink/mlbridge.h",  tmp_path + "/mlbridge.h")
+    files = [f for f in os.listdir("src") if os.path.isfile("src/" + f)]
+    for file_name in files:
+        shutil.copy("src/" + file_name,  tmp_path + "/" + file_name)
 
     # Set the location of the final binary.
     if output_path == "":
@@ -257,8 +258,8 @@ def main():
     # Construct the makefile.
     cflags = " ".join(other_compiler_flags)
     lflags = " ".join(other_link_flags)
-    cpp_sources = " ".join([file for file in source_files if file[-4:]==".cpp"])
-    c_sources = " ".join([file for file in source_files if file[-2:]==".c"])
+    cpp_sources = " ".join([tmp_path + "/" + file for file in source_files if file[-4:]==".cpp"])
+    c_sources = " ".join([tmp_path + "/" + file for file in source_files if file[-2:]==".c"])
     binary = output_path + "/" + output_file
     template_dict = { "cflags": cflags,
                       "lflags": lflags,
@@ -275,10 +276,7 @@ def main():
 
     # Write out the makefile.
     # First, delete the Makefile if it exists.
-    try:
-        os.remove("Makefile")
-    except OSError:
-        pass
+    deleteFileIfExists("Makefile")
     # Now write out the Makefile.
     with open("Makefile", "w") as f:
         f.write(makefile)
