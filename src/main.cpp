@@ -83,7 +83,7 @@ int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
         std::string str = optionsMap["linkname"].as<std::string>();
         if(str.empty()){
             //Empty string. Ignore this option.
-            std::cout << "Option linkname cannot be empty. Ingoring." << std::endl;
+            std::cout << "Option linkname cannot be empty. Ignoring." << std::endl;
         } else{
             //Make a copy, because optionsMap will go out of scope and free the linkname before we can connect with it.
             bridge.argv[1] = copyDataFromString(str);
@@ -93,7 +93,7 @@ int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
         std::string str = optionsMap["linkmode"].as<std::string>();
         if(str.empty()){
             //Empty string. Ignore this option.
-            std::cout << "Option linkmode cannot be empty. Ingoring." << std::endl;
+            std::cout << "Option linkmode cannot be empty. Ignoring." << std::endl;
         } else{
             //Make a copy, because optionsMap will go out of scope and free the linkname before we can connect with it.
             bridge.argv[3] = copyDataFromString(str);
