@@ -7,8 +7,7 @@
 
 #include <iostream>
 #include <boost/program_options.hpp>
-
-#include "mlbridge.h"
+#include "config.h"
 
 //Shortened for convenience.
 namespace opt = boost::program_options;

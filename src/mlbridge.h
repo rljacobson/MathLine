@@ -13,7 +13,7 @@
 #include <string>
 #include <queue>
 
-#include "wstp.h"
+#include "config.h"
 
 struct MLBridgeException{
     std::string error;
@@ -89,8 +89,8 @@ private:
     //Syntax messages are cached. 
     std::queue<MLBridgeMessage*> messages;
     
-    WSLINK link = NULL;
-    WSEnvironment environment = NULL;
+    MMALINK link = NULL;
+    MMAEnvironment environment = NULL;
     
     void ErrorCheck();
     std::string ReadInput();
@@ -122,7 +122,5 @@ private:
     bool ReceivedBeginDialogPacket();
     bool ReceivedEndDialogPacket();
 };
-
-
 
 #endif /* defined(__MathLinkBridge__mlbridge__) */

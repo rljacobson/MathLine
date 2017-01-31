@@ -5,10 +5,14 @@
 //  Created by Robert Jacobson on 12/14/14.
 //  Copyright (c) 2014 Robert Jacobson. All rights reserved.
 //
+//  Note: Functions with an MMA- prefix are really MathLink/WSTP functions.
+//        The correct prefix (ML- or WS-) is determined at compile time with
+//        a macro. See config.h for details.
 
 #include <iostream>
 #include <string>
 #include <signal.h>
+#include <stdlib.h> //Needed to free() memory linenoise allocat with malloc().
 #include "linenoise.h"
 #include "mlbridge.h"
 
@@ -48,7 +52,7 @@ void MLBridge::Connect(int newArgc, const char *newArgv[]){
     }
     
     //Initialize the link to Mathematica.
-    environment = WSInitialize(NULL);
+    environment = MAAInitialize(NULL);
     if(environment == NULL){
         //Failed to initialize the link.
         connected = false;
@@ -56,22 +60,22 @@ void MLBridge::Connect(int newArgc, const char *newArgv[]){
     }
     
     //Open the link to Mathematica.
-    link = WSOpen(argc, (char **)argv);
+    link = MMAOpen(argc, (char **)argv);
     if (link == NULL) {
         //The link failed to open.
         connected = false;
-        WSDeinitialize(environment);
+        MMADeinitialize(environment);
         throw MLBridgeException("Cannot open MathLink.");
     }
     //Make sure we can connect through the link.
-    if (WSConnect(link) == 0){
+    if (MMAConnect(link) == 0){
         //We're not connected.
         /*
          TODO: MLConnect can block indefinitely. We should poll MLReady until it returns true or until we timeout before trying to call MLConnect.
          */
         connected = false;
-        WSClose(link);
-        WSDeinitialize(environment);
+        MMAClose(link);
+        MMADeinitialize(environment);
         throw MLBridgeException("Cannot connect to MathLink.");
     }
     
@@ -84,8 +88,8 @@ void MLBridge::Connect(int newArgc, const char *newArgv[]){
 
 void MLBridge::Disconnect(){
     if(connected){
-        WSClose(link);
-        WSDeinitialize(environment);
+        MMAClose(link);
+        MMADeinitialize(environment);
         connected = false;
     }
 }
@@ -180,7 +184,7 @@ std::string MLBridge::GetUTF8String(GetFunctionType func){
     
     switch(func){
         case GetString:
-            success = WSGetUTF8String(link, &stringBuffer, &bytes, &characters);
+            success = MMAGetUTF8String(link, &stringBuffer, &bytes, &characters);
             break;
             
         case GetFunction:
@@ -189,7 +193,7 @@ std::string MLBridge::GetUTF8String(GetFunctionType func){
             break;
             
         case GetSymbol:
-            success = WSGetUTF8Symbol(link, &stringBuffer, &bytes, &characters);
+            success = MMAGetUTF8Symbol(link, &stringBuffer, &bytes, &characters);
             break;
             
         case GetCharacters:
@@ -205,7 +209,7 @@ std::string MLBridge::GetUTF8String(GetFunctionType func){
     
     //Copy byte-for-byte into the output string buffer.
     output.assign((char *)stringBuffer, bytes);
-    WSReleaseUTF8String(link, stringBuffer, bytes);
+    MMAReleaseUTF8String(link, stringBuffer, bytes);
     
     return output;
 }
@@ -214,8 +218,8 @@ int MLBridge::GetNextPacket(){
     int packet;
     
     //It's never an error to call MLNewPacket(), but it is an error to call MLNextPacket if we aren't finished with the previous packet.
-    WSNewPacket(link);
-    packet = WSNextPacket(link);
+    MMANewPacket(link);
+    packet = MMANextPacket(link);
     ErrorCheck();
     
     return packet;
@@ -228,9 +232,9 @@ void MLBridge::ErrorCheck(){
     if(!link){
         throw MLBridgeException("The MathLink connection has been severed.", WSEDEAD);
     }
-    errorCode = WSError(link);
+    errorCode = MMAError(link);
     if(errorCode!=0){
-        error = "MathLink Error: " + std::string(WSErrorMessage(link));
+        error = "MathLink Error: " + std::string(MMAErrorMessage(link));
         Disconnect();
         throw MLBridgeException(error, errorCode);
     }
@@ -252,22 +256,22 @@ void MLBridge::Evaluate(std::string inputString){
         //The user has input Mathematica code.
         if(useMainLoop){
             //Maintain session history for this evaluation.
-            WSPutFunction(link, "EnterTextPacket", 1);
+            MMAPutFunction(link, "EnterTextPacket", 1);
         }else{
             //Bypass the kernel's Main Loop.
-            WSPutFunction(link, "EvaluatePacket", 1);
-            WSPutFunction(link, "ToString", 1);
-            WSPutFunction(link, "ToExpression", 1);
+            MMAPutFunction(link, "EvaluatePacket", 1);
+            MMAPutFunction(link, "ToString", 1);
+            MMAPutFunction(link, "ToExpression", 1);
         }
         
     } else if(inputMode == TextMode){
         //The user has input arbitrary text, from example in response to an InputString[] call.
-        WSPutFunction(link, "TextPacket", 1);
+        MMAPutFunction(link, "TextPacket", 1);
         //Turn off TextMode
         inputMode = ExpressionMode;
     }
-    WSPutUTF8String(link, (const unsigned char *)inputString.data(), (int)inputString.size());
-    WSEndPacket(link);
+    MMAPutUTF8String(link, (const unsigned char *)inputString.data(), (int)inputString.size());
+    MMAEndPacket(link);
     //We check for errors after sending a packet.
     ErrorCheck();
     running = true;
@@ -286,11 +290,11 @@ void MLBridge::EvaluateWithoutMainLoop(std::string inputString, bool eatReturnPa
     }
     
     //Bypass the kernel's Main Loop.
-    WSPutFunction(link, "EvaluatePacket", 1);
-    WSPutFunction(link, "ToString", 1);
-    WSPutFunction(link, "ToExpression", 1);
-    WSPutUTF8String(link, (const unsigned char *)inputString.data(), (int)inputString.size());
-    WSEndPacket(link);
+    MMAPutFunction(link, "EvaluatePacket", 1);
+    MMAPutFunction(link, "ToString", 1);
+    MMAPutFunction(link, "ToExpression", 1);
+    MMAPutUTF8String(link, (const unsigned char *)inputString.data(), (int)inputString.size());
+    MMAEndPacket(link);
     //We check for errors after sending a packet.
     ErrorCheck();
     
@@ -315,7 +319,7 @@ std::string MLBridge::GetKernelVersion(){
     //Fetch the string returned by the kernel.
     if(GetNextPacket() != RETURNPKT){
         //Return an error.
-        throw MLBridgeException("Kernel sent an unexpected packet in response to a request to exavluate $Version.");
+        throw MLBridgeException("Kernel sent an unexpected packet in response to a request to evaluate $Version.");
     }
     
     return GetUTF8String();
@@ -344,8 +348,8 @@ bool MLBridge::isRunning(){
     std::ostream &cout = *pcout;
     
     //We poll to see if MLNextPacket will block. If it will, just return true. We don't want to spend time blocking in MLNextPacket because we want to be able to send an MLInterruptMessage if we need to.
-    WSFlush(link);
-    if(!WSReady(link)) {
+    MMAFlush(link);
+    if(!MMAReady(link)) {
         //MLNextPacket will block, meaning we are waiting on the kernel, so don't call it. Just return instead.
         return running;
     }
@@ -569,7 +573,7 @@ bool MLBridge::ReceivedSyntaxPacket(){
 
     //We cache syntax messages. This syntax packet must be associated to the last message cached. Record the position in that message's cache entry.
     MLBridgeMessage *m = messages.back();
-    WSGetInteger(link, &m->position);
+    MMAGetInteger(link, &m->position);
     
     /*
      We don't throw an MLBridgeException because it's for errors associated to the link to the kernel, not for every possible error. Thus we do not throw an exception here. In fact, doing so would disrupt the internal state of the REPL. If one wishes to catch syntax errors, the best way is probably to implement a call-back function to handle them and call the function from here.
@@ -598,7 +602,7 @@ bool MLBridge::ReceivedMenuPacket(){
     //What is this number? It seems to indicate that the kernel will subsequently output additional menu text, so we should expect it. (I think.) This happens when the user enters an invalid option at the Interrupt> menu.
     int interruptMenuNumber = 0;
     
-    WSGetInteger(link, &interruptMenuNumber);
+    MMAGetInteger(link, &interruptMenuNumber);
 
     inputPrompt = GetUTF8String();
 
@@ -676,7 +680,7 @@ bool MLBridge::ReceivedSuspendPacket(){
     
     if(debug) *pcout << "<SUSPENDPKT>";
     
-    WSNewPacket(link); //Do I need this line?
+    MMANewPacket(link); //Do I need this line?
     
     *pcout << "--suspended--" << std::endl;
     
@@ -690,7 +694,7 @@ bool MLBridge::ReceivedResumePacket(){
     
     *pcout << "--resumed--" << std::endl;
     
-    WSNewPacket(link); //Do I need this line?
+    MMANewPacket(link); //Do I need this line?
     
     return false;
 }
@@ -701,7 +705,7 @@ bool MLBridge::ReceivedBeginDialogPacket(){
     if(debug) *pcout << "<BEGINDLGPKT>";
     
     int dialogLevel;
-    WSGetInteger(link, &dialogLevel);
+    MMAGetInteger(link, &dialogLevel);
     *pcout << "entering dialog:" << dialogLevel << std::endl;
     
     return false;
@@ -712,7 +716,7 @@ bool MLBridge::ReceivedEndDialogPacket(){
     if(debug) *pcout << "<ENDDLGPKT>";
     
     int dialogLevel;
-    WSGetInteger(link, &dialogLevel);
+    MMAGetInteger(link, &dialogLevel);
     dialogLevel--;
     *pcout << "leaving dialog:" << dialogLevel << std::endl;
     

@@ -1,5 +1,7 @@
 cmake_minimum_required (VERSION 2.6)
 project (MathLine)
+add_executable(MathLine ${CMAKE_SOURCE_DIR}/src/main.cpp ${CMAKE_SOURCE_DIR}/src/mlbridge.cpp ${CMAKE_SOURCE_DIR}/src/linenoise.c)
+#include_directories("${CMAKE_SOURCE_DIR}/src")
 
 #### FindMathematica ####
 set (CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/Mathematica" ${CMAKE_MODULE_PATH})
@@ -15,34 +17,30 @@ find_package(Mathematica COMPONENTS WSTP MathLink)
 #### Boost ####
 set(Boost_USE_STATIC_LIBS ON) 
 set(Boost_USE_STATIC_RUNTIME ON) 
-find_package(Boost 1.45.0 COMPONENTS program_options) 
+find_package(Boost COMPONENTS program_options)
+include_directories(${Boost_INCLUDE_DIRS})
+target_link_libraries(MathLine ${Boost_LIBRARIES})
 
-#### Mac OS X Specific Stuff ####
+# Choose between WSTP and MathLink.
+if(Mathematica_WSTP_FOUND)
+	set(WSTP true)
+	include_directories(${Mathematica_WSTP_INCLUDE_DIR})
+	target_link_libraries(MathLine ${Mathematica_WSTP_LIBRARY})
+elseif(Mathematica_MathLink_FOUND)
+	set(WSTP false)
+	include_directories(${Mathematica_MathLink_INCLUDE_DIR})
+	target_link_libraries(MathLine ${Mathematica_MathLink_LIBRARY})
+endif()
+
 if(APPLE)
-    # MathLink requires we link to CoreFoundation
+	# MathLink requires we link to CoreFoundation
 	find_library(COREFOUNDATION_LIBRARY CoreFoundation)
+	target_link_libraries(MathLine ${COREFOUNDATION_LIBRARY})
 endif()
 
-if(Boost_FOUND AND Mathematica_WSTP_FOUND)
-	# Use the WSTP version of mlbridge.
-	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/WSTP/mlbridge.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/mlbridge.cpp COPYONLY)
-	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/WSTP/mlbridge.h ${CMAKE_CURRENT_SOURCE_DIR}/src/mlbridge.h COPYONLY)
-	include_directories(${Boost_INCLUDE_DIRS} ${Mathematica_WSTP_INCLUDE_DIR}) 
-    add_executable(MathLine src/main.cpp src/mlbridge.cpp src/linenoise.c)
-    target_link_libraries(MathLine ${Boost_LIBRARIES} ${Mathematica_WSTP_LIBRARY})
-    if (APPLE)
-    	# MathLink requires we link to CoreFoundation
-		target_link_libraries(MathLine ${COREFOUNDATION_LIBRARY})
-	endif()
-elseif(Boost_FOUND AND Mathematica_MathLink_FOUND)
-	# Use the MathLink version of mlbridge.
-	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/MathLink/mlbridge.cpp ${CMAKE_CURRENT_SOURCE_DIR}/src/mlbridge.cpp COPYONLY)
-	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/MathLink/mlbridge.h ${CMAKE_CURRENT_SOURCE_DIR}/src/mlbridge.h COPYONLY)
-	include_directories(${Boost_INCLUDE_DIRS} ${Mathematica_MathLink_INCLUDE_DIR}) 
-    add_executable(MathLine src/main.cpp src/mlbridge.cpp src/linenoise.c)
-    target_link_libraries(MathLine ${Boost_LIBRARIES} ${Mathematica_MathLink_LIBRARY})
-    if(APPLE)
-    	# MathLink requires we link to CoreFoundation
-		target_link_libraries(MathLine ${COREFOUNDATION_LIBRARY})
-	endif()
-endif()
+# configure a header file to pass some of the CMake settings
+# to the source code
+configure_file (
+		"${CMAKE_SOURCE_DIR}/src/config.h.in"
+		"${CMAKE_SOURCE_DIR}/src/config.h"
+)

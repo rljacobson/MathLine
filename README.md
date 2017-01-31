@@ -1,6 +1,6 @@
 # Introduction
 
-MathLine is a **Math**ematica command **Line** front end to the Mathematica kernel. The front end has feature parity with the textual front end that ships with Mathematica. It uses WSTP, the new name for Wolfram's MathLink as of Mathematica 10. This project subsumes [MathLinkBridge](https://github.com/rljacobson/MathLinkBridge), selecting MathLink or WSTP at build time.
+MathLine is a **Math**ematica command **Line** front end to the Mathematica kernel. The front end has feature parity with the textual front end that ships with Mathematica. This project subsumes [MathLinkBridge](https://github.com/rljacobson/MathLinkBridge), selecting MathLink or WSTP at build time.
 
 # Usage
 
