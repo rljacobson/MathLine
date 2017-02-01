@@ -18,10 +18,20 @@
 
 //Used for printf() debugging.
 bool debug = false;
+void DebugPrint(std::string msg){
+    //std::ostream &cout = *pcout;
+    if(debug) std::cout << msg << "\n";
+}
 
-MLBridgeException::MLBridgeException(std::string error, int errorCode): error(error), errorCode(errorCode){
+
+MLBridgeException::MLBridgeException(std::string error, int errorCode): errorMsg(error), errorCode(errorCode){
     //Pass.
 }
+
+std::string MLBridgeException::ToString(){
+    return std::string(MMANAME " Error " + std::to_string(errorCode) + ": " + errorMsg);
+}
+
 
 MLBridge::MLBridge(bool connect){
     SetMaxHistory();
@@ -48,40 +58,42 @@ void MLBridge::Connect(int newArgc, const char *newArgv[]){
     }
     //If no parameters are specified and this has no default parameters, bail.
     if(argc==0 || argv==NULL){
-        throw MLBridgeException("No MathLink parameters specified for the connection.");
+        throw MLBridgeException("No " MMANAME " parameters specified for the connection.");
     }
     
     //Initialize the link to Mathematica.
-    environment = MAAInitialize(NULL);
+    environment = MMAInitialize(NULL);
     if(environment == NULL){
         //Failed to initialize the link.
         connected = false;
-        throw MLBridgeException("Cannot initialize MathLink.");
+        throw MLBridgeException("Cannot initialize " MMANAME ".");
     }
     
     //Open the link to Mathematica.
     link = MMAOpen(argc, (char **)argv);
     if (link == NULL) {
+        std::cout << "Link is null." << "\n";
         //The link failed to open.
         connected = false;
         MMADeinitialize(environment);
-        throw MLBridgeException("Cannot open MathLink.");
+        throw MLBridgeException("Cannot open " MMANAME ".");
     }
+
     //Make sure we can connect through the link.
-    if (MMAConnect(link) == 0){
-        //We're not connected.
-        /*
+    /*
          TODO: MLConnect can block indefinitely. We should poll MLReady until it returns true or until we timeout before trying to call MLConnect.
-         */
+     */
+    if (MMAReady(link) == true && MMAConnect(link) == 0){
+        //We're not connected.
         connected = false;
         MMAClose(link);
         MMADeinitialize(environment);
-        throw MLBridgeException("Cannot connect to MathLink.");
+        throw MLBridgeException("Cannot connect to " MMANAME ".");
     }
     
     //Link is successful.
     connected = true;
-    
+
     //Initialize the kernel (sets $PrePrint, etc.).
     InitializeKernel();
 }
@@ -94,18 +106,21 @@ void MLBridge::Disconnect(){
     }
 }
 
-void MLBridge::InitializeKernel(){
+void MLBridge::InitializeKernel() {
     int packet;
-    
+
     //The first thing the kernel does is send us an InputNamePacket.
+    if (!MMAReady(link)){
+        DebugPrint("Link not ready.");
+        ErrorCheck();
+    }
     packet = GetNextPacket();
     if(packet == INPUTNAMEPKT){
         inputPrompt = GetUTF8String();
     } else{
-        //Error condition.
-        throw MLBridgeException("Kernel sent an unexpected packet during initial startup");
+        //Error condition, but not ILLEGALPKT or other link/kernel error.
+        throw MLBridgeException("Kernel sent an unexpected packet (" + std::to_string(packet) + ") during initial startup.");
     }
-    
     SetPrePrint("InputForm");
 }
 
@@ -164,12 +179,11 @@ void MLBridge::REPL(){
             inputString = ReadInput();
             if(inputString == "Exit" || inputString == "Exit[]" ) break;
             Evaluate(inputString);
-            //Keep reading from the kernel.
-            while (isRunning());
+            //Read and act on response from the kernel.
+            ProcessKernelResponse();
         }
     } catch (MLBridgeException e) {
-        //cout << "Error code: " << e.errorCode << "\n";
-        cout << e.error << std::endl;
+        cout << e.ToString() << std::endl;
     }
 }
 
@@ -204,9 +218,10 @@ std::string MLBridge::GetUTF8String(GetFunctionType func){
     if(!success )
     {
         //No string to read.
-        throw MLBridgeException("String expected but not read from MathLink.");
+        ErrorCheck(); //Disconnects on error.
+        throw MLBridgeException("String expected but not read from" MMANAME ".");
     }
-    
+
     //Copy byte-for-byte into the output string buffer.
     output.assign((char *)stringBuffer, bytes);
     MMAReleaseUTF8String(link, stringBuffer, bytes);
@@ -217,10 +232,10 @@ std::string MLBridge::GetUTF8String(GetFunctionType func){
 int MLBridge::GetNextPacket(){
     int packet;
     
-    //It's never an error to call MLNewPacket(), but it is an error to call MLNextPacket if we aren't finished with the previous packet.
-    MMANewPacket(link);
+    //MLNewPacket skips to the end of the current packet even if we are already at the end. It's never an error to call MLNewPacket(), but it is an error to call MLNextPacket if we aren't finished with the previous packet.
+    if(!MMANewPacket(link)) ErrorCheck();
     packet = MMANextPacket(link);
-    ErrorCheck();
+    if(packet == ILLEGALPKT) ErrorCheck();
     
     return packet;
 }
@@ -230,11 +245,20 @@ void MLBridge::ErrorCheck(){
     std::string error;
     
     if(!link){
-        throw MLBridgeException("The MathLink connection has been severed.", WSEDEAD);
+        throw MLBridgeException("The " MMANAME " connection has been severed.", MMAEDEAD);
     }
     errorCode = MMAError(link);
-    if(errorCode!=0){
-        error = "MathLink Error: " + std::string(MMAErrorMessage(link));
+    if(errorCode != MMAEOK){
+        const char *errormsg = MMAErrorMessage(link);
+        if(errormsg){
+            error = std::string(errormsg);
+            MMAReleaseErrorMessage(link, errormsg);
+        }else{
+            error = "Kernel Error, but " MMANAME " did not return an error description.";
+        }
+        /*
+          TO DO: Don't disconnect on error. Allow caller to attempt to recover based on error state instead.
+        */
         Disconnect();
         throw MLBridgeException(error, errorCode);
     }
@@ -339,100 +363,26 @@ void MLBridge::EatPackets(int n){
 }
 */
 
-bool MLBridge::isRunning(){
+bool MLBridge::IsRunning(){
+    //If we never started, there's nothing to do!
     if(!running) return false;
-    
-    bool done = false;
-    std::string output;
-    //Syntactic convenience variable.
-    std::ostream &cout = *pcout;
-    
-    //We poll to see if MLNextPacket will block. If it will, just return true. We don't want to spend time blocking in MLNextPacket because we want to be able to send an MLInterruptMessage if we need to.
-    MMAFlush(link);
-    if(!MMAReady(link)) {
-        //MLNextPacket will block, meaning we are waiting on the kernel, so don't call it. Just return instead.
-        return running;
-    }
-    //Get the next packet.
-    int packet = GetNextPacket();
-    
-    switch(packet){
-        case INPUTNAMEPKT:
-            done = ReceivedInputNamePacket();
-            break;
-        case INPUTPKT:
-            done = ReceivedInputPacket();
-            break;
-        case OUTPUTNAMEPKT:
-            done = ReceivedOutputNamePacket();
-            break;
-        case RETURNTEXTPKT:
-            done = ReceivedReturnTextPacket();
-            break;
-        case RETURNPKT:
-            //Handled by RETURNEXPRPKT.
-        case RETURNEXPRPKT:
-            done = ReceivedReturnExpressionPacket();
-            break;
-        case TEXTPKT:
-            done = ReceivedTextPacket();
-            break;
-        case MESSAGEPKT:
-            done = ReceivedMessagePacket();
-            break;
-        case SYNTAXPKT:
-            done = ReceivedSyntaxPacket();
-            break;
-        case INPUTSTRPKT:
-            done = ReceivedInputStringPacket();
-            break;
-        case MENUPKT:
-            done = ReceivedMenuPacket();
-            break;
-        case DISPLAYPKT:
-            done = ReceivedDisplayPacket();
-            break;
-        case DISPLAYENDPKT:
-            done = ReceivedDisplayEndPacket();
-            break;
-        case SUSPENDPKT:
-            done = ReceivedSuspendPacket();
-            break;
-        case RESUMEPKT:
-            done = ReceivedResumePacket();
-            break;
-        case BEGINDLGPKT:
-            done = ReceivedBeginDialogPacket();
-            break;
-        case ENDDLGPKT:
-            done = ReceivedEndDialogPacket();
-            break;
-        case ILLEGALPKT:
-            if(debug) cout << "<ILLEGALPKT>";
-            //We should attempt recovery.
-            done = true;
-            break;
-        default: //Unhandled packet.
-            if(debug) cout << "<unknown?>";
-            break;
-    } //End switch.
-    
 
-    
-    //Print any cached messages we haven't printed yet.
-    if(done) PrintMessages();
-    
-    running = !done;
+    if(!MMAFlush(link) || !MMAReady(link)) {
+        //Check if an error has occurred.
+        ErrorCheck();
+        running = true;
+    } else{
+        running = false;
+    }
     return running;
 }
 
 void MLBridge::PrintMessages(){
-    //Syntactic convenience variable.
     std::ostream &cout = *pcout;
     MLBridgeMessage *m;
     
     while(!messages.empty()){
-        //Only print if we aren't coninuing previous input.
+        //Only print if we aren't continuing previous input.
         if(!continueInput){
             m = messages.front();
             cout << "\n" << m->message << std::endl;
@@ -451,7 +401,7 @@ void MLBridge::PrintMessages(){
 //The following represent In[#]:= strings and text that the kernel prints to the console respectively.
 bool MLBridge::ReceivedInputNamePacket(){
     
-    if(debug) *pcout << "<INPUTNAMEPKT>";
+    DebugPrint("<INPUTNAMEPKT>");
     if(!continueInput) *pcout << "\n\n";
     if(showInOutStrings && useMainLoop){
         inputPrompt = GetUTF8String();
@@ -462,8 +412,8 @@ bool MLBridge::ReceivedInputNamePacket(){
 
 //Represents a prompt for user input.
 bool MLBridge::ReceivedInputPacket(){
-    
-    if(debug) *pcout << "<INPUTPKT>";
+
+    DebugPrint("<INPUTPKT>");
     inputPrompt = GetUTF8String();
     
     return true;
@@ -473,8 +423,8 @@ bool MLBridge::ReceivedInputPacket(){
 bool MLBridge::ReceivedOutputNamePacket(){
     std::ostream &cout = *pcout;
     std::string output;
-    
-    if(debug) cout << "<OUTPUTNAMEPKT>";
+
+    DebugPrint("<OUTPUTNAMEPKT>");
     
     //Print any cached messages.
     PrintMessages();
@@ -492,8 +442,8 @@ bool MLBridge::ReceivedOutputNamePacket(){
 //Contains the text returned from the evaluation.
 bool MLBridge::ReceivedReturnTextPacket(){
     std::ostream &cout = *pcout;
-    
-    if(debug) cout << "<RETURNTEXTPKT>";
+
+    DebugPrint("<RETURNTEXTPKT>");
     
     //Frankly, I'm not sure how to correctly format the output without starting to print it on a new line. There must be a way because Wolfram's interface does it.
     cout << "\n" << GetUTF8String();
@@ -504,8 +454,8 @@ bool MLBridge::ReceivedReturnTextPacket(){
 //We receive these packets when useMainLoop is false.
 bool MLBridge::ReceivedReturnExpressionPacket(){
     std::ostream &cout = *pcout;
-    
-    if(debug) cout << "<RETURNPKT/RETURNEXPRPKT>";
+
+    DebugPrint("<RETURNPKT/RETURNEXPRPKT>");
     
     //Print any cached messages.
     PrintMessages();
@@ -520,8 +470,8 @@ bool MLBridge::ReceivedReturnExpressionPacket(){
 //This packet typically contains the message (string) describing a syntax error.
 bool MLBridge::ReceivedTextPacket(){
     std::ostream &cout = *pcout;
-    
-    if(debug) cout << "<TEXTPKT>";
+
+    DebugPrint("<TEXTPKT>");
     
     //We don't print if this text packet is for incomplete input syntax error.
     if(!continueInput){
@@ -533,9 +483,8 @@ bool MLBridge::ReceivedTextPacket(){
 
 //This packet contains postscript code, i.e., the kernel is sending an image.
 bool MLBridge::ReceivedDisplayPacket(){
-    std::ostream &cout = *pcout;
-    
-    if(debug) cout << "<DISPLAYPKT>";
+    DebugPrint("<DISPLAYPKT>");
+
     if(makeNewImage){
         //If this is a new image (i.e. postscript string), create a new string to store the code.
         makeNewImage = false;
@@ -551,9 +500,7 @@ bool MLBridge::ReceivedDisplayPacket(){
 
 //This packet is received when the kernel is done sending postscript code.
 bool MLBridge::ReceivedDisplayEndPacket(){
-    std::ostream &cout = *pcout;
-    
-    if(debug) cout << "<DISPLAYENDPKT>";
+    DebugPrint("<DISPLAYENDPKT>");
     
     image->append(GetUTF8String());
 
@@ -563,13 +510,12 @@ bool MLBridge::ReceivedDisplayEndPacket(){
     makeNewImage = true;
     
     //It is unclear if we still return false when useMainLoop is false.
-    
     return false;
 }
 
 //The kernel reports a syntax error. This packet contains the position of the error.
 bool MLBridge::ReceivedSyntaxPacket(){
-    if(debug) *pcout << "<SYNTAXPKT>";
+    DebugPrint("<SYNTAXPKT>");
 
     //We cache syntax messages. This syntax packet must be associated to the last message cached. Record the position in that message's cache entry.
     MLBridgeMessage *m = messages.back();
@@ -584,8 +530,8 @@ bool MLBridge::ReceivedSyntaxPacket(){
 //This packet represents a request from the kernel for a plaintext string input from the user.
 bool MLBridge::ReceivedInputStringPacket(){
     std::ostream &cout = *pcout;
-    
-    if(debug) cout << "<INPUTSTRPKT>";
+
+    DebugPrint("<INPUTSTRPKT>");
     
     cout << GetUTF8String();
     
@@ -596,8 +542,7 @@ bool MLBridge::ReceivedInputStringPacket(){
 //Sending an interrupt signal (i.e. ctrl+c) brings up the Interrupt> menu which expects textual user input.
 bool MLBridge::ReceivedMenuPacket(){
     std::ostream &cout = *pcout;
-    
-    if(debug) cout << "<MENUPKT>";
+    DebugPrint("<MENUPKT>");
     
     //What is this number? It seems to indicate that the kernel will subsequently output additional menu text, so we should expect it. (I think.) This happens when the user enters an invalid option at the Interrupt> menu.
     int interruptMenuNumber = 0;
@@ -616,7 +561,7 @@ bool MLBridge::ReceivedMenuPacket(){
             //We received a packet we didn't expect.
             throw MLBridgeException("Menu text expected but not received.");
         }
-        if(debug) cout << "<TEXTPKT>";
+        DebugPrint("<TEXTPKT>");
         
         //Get the menu text from the text packet and print it.
         cout << GetUTF8String();
@@ -632,8 +577,8 @@ bool MLBridge::ReceivedMenuPacket(){
 //Message from the kernel, for example, to indicate a runtime error.
 bool MLBridge::ReceivedMessagePacket(){
     std::ostream &cout = *pcout;
-    
-    if(debug) cout << "<MESSAGEPKT>";
+
+    DebugPrint("<MESSAGEPKT>");
 
     /*
      The problem we need to solve here is that we want to silently continue reading input from the user if we receive "Syntax::sntxi", but otherwise we want to output the message. Problem is, we might receive other messages BEFORE "Syntax::sntxi". So we cache syntax messsages until they are all read from the kernel, check for the presence of "Syntax::sntxi", and print them or not.
@@ -677,8 +622,7 @@ bool MLBridge::ReceivedMessagePacket(){
 
 //The SuspendPacket tells this link that something else, perhaps another front end, has taken control, and thus the kernel will start ignoring us.
 bool MLBridge::ReceivedSuspendPacket(){
-    
-    if(debug) *pcout << "<SUSPENDPKT>";
+    DebugPrint("<SUSPENDPKT>");
     
     MMANewPacket(link); //Do I need this line?
     
@@ -689,8 +633,7 @@ bool MLBridge::ReceivedSuspendPacket(){
 
 //The ResumePacket tells this link that something else, perhaps another front end, has given us back control, and thus the kernel will start paying attention to us again.
 bool MLBridge::ReceivedResumePacket(){
-    
-    if(debug) *pcout << "<RESUMEPKT>";
+    DebugPrint("<RESUMEPKT>");
     
     *pcout << "--resumed--" << std::endl;
     
@@ -701,8 +644,7 @@ bool MLBridge::ReceivedResumePacket(){
 
 //A dialog is entered when a computation is interrupted and the user enters debug mode. Debug modes/dialogs can be nested.
 bool MLBridge::ReceivedBeginDialogPacket(){
-    
-    if(debug) *pcout << "<BEGINDLGPKT>";
+    DebugPrint("<BEGINDLGPKT>");
     
     int dialogLevel;
     MMAGetInteger(link, &dialogLevel);
@@ -712,8 +654,7 @@ bool MLBridge::ReceivedBeginDialogPacket(){
 }
 
 bool MLBridge::ReceivedEndDialogPacket(){
-    
-    if(debug) *pcout << "<ENDDLGPKT>";
+    DebugPrint("<ENDDLGPKT>");
     
     int dialogLevel;
     MMAGetInteger(link, &dialogLevel);
@@ -721,4 +662,86 @@ bool MLBridge::ReceivedEndDialogPacket(){
     *pcout << "leaving dialog:" << dialogLevel << std::endl;
     
     return false;
+}
+
+void MLBridge::ProcessKernelResponse() {
+    bool done = false;
+    std::string output;
+
+    //Keep fetching packets until the kernel is finished responding.
+    do {
+        //We poll to see if MLNextPacket will block. If it will, just return true. We don't want to spend time blocking in MLNextPacket because we want to be able to send an MLInterruptMessage if we need to.
+        while(IsRunning() );
+
+        //Get the next packet.
+        int packet = GetNextPacket();
+
+        switch (packet) {
+            case INPUTNAMEPKT:
+                done = ReceivedInputNamePacket();
+                break;
+            case INPUTPKT:
+                done = ReceivedInputPacket();
+                break;
+            case OUTPUTNAMEPKT:
+                done = ReceivedOutputNamePacket();
+                break;
+            case RETURNTEXTPKT:
+                done = ReceivedReturnTextPacket();
+                break;
+            case RETURNPKT:
+                //Handled by RETURNEXPRPKT.
+            case RETURNEXPRPKT:
+                done = ReceivedReturnExpressionPacket();
+                break;
+            case TEXTPKT:
+                done = ReceivedTextPacket();
+                break;
+            case MESSAGEPKT:
+                done = ReceivedMessagePacket();
+                break;
+            case SYNTAXPKT:
+                done = ReceivedSyntaxPacket();
+                break;
+            case INPUTSTRPKT:
+                done = ReceivedInputStringPacket();
+                break;
+            case MENUPKT:
+                done = ReceivedMenuPacket();
+                break;
+            case DISPLAYPKT:
+                done = ReceivedDisplayPacket();
+                break;
+            case DISPLAYENDPKT:
+                done = ReceivedDisplayEndPacket();
+                break;
+            case SUSPENDPKT:
+                done = ReceivedSuspendPacket();
+                break;
+            case RESUMEPKT:
+                done = ReceivedResumePacket();
+                break;
+            case BEGINDLGPKT:
+                done = ReceivedBeginDialogPacket();
+                break;
+            case ENDDLGPKT:
+                done = ReceivedEndDialogPacket();
+                break;
+            case ILLEGALPKT:
+                DebugPrint("<ILLEGALPKT>");
+                //We should attempt recovery.
+                done = true;
+                break;
+            default: //Unhandled packet.
+                DebugPrint("<unknown?>");
+                break;
+        } //End switch.
+
+        //Print any cached messages we haven't printed yet.
+        if (done) PrintMessages();
+
+        running = !done;
+    }while(!done);
+
+    return;
 }

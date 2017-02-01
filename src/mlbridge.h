@@ -16,9 +16,10 @@
 #include "config.h"
 
 struct MLBridgeException{
-    std::string error;
+    std::string errorMsg;
     int errorCode;
     MLBridgeException(std::string errorMsg, int errorCode = 0);
+    std::string ToString();
 };
 
 struct MLBridgeMessage{
@@ -66,7 +67,7 @@ public:
     void Evaluate(std::string inputString);
     //Skips the Main Loop regardless of the state of useMainLoop.
     void EvaluateWithoutMainLoop(std::string inputString, bool eatReturnPacket = true);
-    bool isRunning();
+    bool IsRunning();
     void REPL();
     void SetMaxHistory(int max = 10);
     void SetPrePrint(std::string preprintfunction);
@@ -121,6 +122,8 @@ private:
     bool ReceivedResumePacket();
     bool ReceivedBeginDialogPacket();
     bool ReceivedEndDialogPacket();
+
+    void ProcessKernelResponse();
 };
 
 #endif /* defined(__MathLinkBridge__mlbridge__) */

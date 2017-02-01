@@ -7,7 +7,7 @@
 
 #include <iostream>
 #include <boost/program_options.hpp>
-#include "config.h"
+#include "mlbridge.h"
 
 //Shortened for convenience.
 namespace opt = boost::program_options;
@@ -127,8 +127,8 @@ int main(int argc, const char * argv[]) {
     try{
         bridge.Connect();
     } catch(MLBridgeException e){
-        std::cerr << e.error << "\n";
-        std::cerr << "Could not connect to Mathematica. Check that " << bridge.argv[1] << " works from a command line." << std::endl;
+        std::cerr << e.ToString() << "\n";
+        std::cerr << "Could not connect to Mathematica. Check that \"" << bridge.argv[1] << "\" works from a command line." << std::endl;
         return 1;
     }
     if(bridge.isConnected()){
