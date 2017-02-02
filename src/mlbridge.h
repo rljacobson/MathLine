@@ -39,11 +39,10 @@ public:
     
     int argc = 4;
     //Oh god, what's the right way to do this?
-    const char *argvdefaults[5] = {"-linkname",
-        "math -mathlink",
-        "-linkmode",
-        "launch",
-        NULL};
+    const char *argvdefaults[4] = {"MathLine",
+        "-linklaunch",
+        "-linkname",
+        "/Applications/Mathematica.app/Contents/MacOS/WolframKernel -wstp"};
     const char **argv = NULL;
     //Streams to use for io.
     std::ostream *pcout = &std::cout;
@@ -95,7 +94,6 @@ private:
     
     void ErrorCheck();
     std::string ReadInput();
-    void EatPackets(int n);
     void PrintMessages();
     void InitializeKernel();
     

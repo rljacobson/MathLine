@@ -44,10 +44,10 @@ int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
      */
     ("linkname",
      opt::value<std::string>(),
-     "String. The call string to set up the link. The default works on *nix systems on which math is in the path and runnable. Defaults to \"math -mathlink\".")
+     "String. The call string to set up the link. The default works on *nix systems on which math is in the path and runnable. Defaults to \"math -" MMANAME_LOWER "\".")
     ("linkmode",
      opt::value<std::string>(),
-     "String. The MathLink link mode. The default launches a new kernel which is almost certainly what you want. It should be possible, however, to take over an already existing kernel, though this has not been tested. Defaults to \"launch\".")
+     "String. The " MMANAME " link mode. The default launches a new kernel which is almost certainly what you want. It should be possible, however, to connect to an already existing kernel. Defaults to \"linklaunch\".")
     ("usegetline",
      opt::value<bool>(&bridge.useGetline)->default_value(false),
      "Boolean. If set to false, we use readline-like input with command history and emacs-style editing capability. If set to true, we use a simplified getline input with limited editing capability. Defaults to false.")
@@ -85,7 +85,7 @@ int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
             std::cout << "Option linkname cannot be empty. Ignoring." << std::endl;
         } else{
             //Make a copy, because optionsMap will go out of scope and free the linkname before we can connect with it.
-            bridge.argv[1] = copyDataFromString(str);
+            bridge.argv[3] = copyDataFromString(str);
         }
     }
     if(optionsMap.count("linkmode")){
@@ -95,7 +95,7 @@ int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
             std::cout << "Option linkmode cannot be empty. Ignoring." << std::endl;
         } else{
             //Make a copy, because optionsMap will go out of scope and free the linkname before we can connect with it.
-            bridge.argv[3] = copyDataFromString(str);
+            bridge.argv[1] = copyDataFromString("-" + str);
         }
     }
     if(optionsMap.count("maxhistory")){
@@ -128,7 +128,7 @@ int main(int argc, const char * argv[]) {
         bridge.Connect();
     } catch(MLBridgeException e){
         std::cerr << e.ToString() << "\n";
-        std::cerr << "Could not connect to Mathematica. Check that \"" << bridge.argv[1] << "\" works from a command line." << std::endl;
+        std::cerr << "Could not connect to Mathematica. Check that " << bridge.argv[3] << " works from a command line." << std::endl;
         return 1;
     }
     if(bridge.isConnected()){

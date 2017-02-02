@@ -17,7 +17,7 @@
 #include "mlbridge.h"
 
 //Used for printf() debugging.
-bool debug = false;
+bool debug = true;
 void DebugPrint(std::string msg){
     //std::ostream &cout = *pcout;
     if(debug) std::cout << msg << "\n";
@@ -35,13 +35,10 @@ std::string MLBridgeException::ToString(){
 
 MLBridge::MLBridge(bool connect){
     SetMaxHistory();
-    argc = 4;
     argv = argvdefaults;
     
     //connect defaults to true.
-    if(connect){
-        Connect();
-    }
+    if(connect) Connect();
 }
 
 MLBridge::~MLBridge(){
@@ -50,6 +47,9 @@ MLBridge::~MLBridge(){
 
 
 void MLBridge::Connect(int newArgc, const char *newArgv[]){
+    int error = MMAEOK;
+    connected = false;
+
     //argc/argv have empty default values.
     //If parameters are specified, use them.
     if(newArgc!=0 && newArgv!=NULL){
@@ -65,32 +65,39 @@ void MLBridge::Connect(int newArgc, const char *newArgv[]){
     environment = MMAInitialize(NULL);
     if(environment == NULL){
         //Failed to initialize the link.
-        connected = false;
         throw MLBridgeException("Cannot initialize " MMANAME ".");
     }
     
     //Open the link to Mathematica.
-    link = MMAOpen(argc, (char **)argv);
-    if (link == NULL) {
-        std::cout << "Link is null." << "\n";
+    //link = MMAOpen(argc, (char **)argv);
+    DebugPrint("Calling WSOpen...");
+    link = MMAOpenArgcArgv( environment, argc, (char **)argv, &error);
+    DebugPrint("WSOpen returned: " + std::to_string(error));
+    if (link == NULL || error != MMAEOK) {
+        DebugPrint("Link is null or error.");
         //The link failed to open.
         connected = false;
         MMADeinitialize(environment);
-        throw MLBridgeException("Cannot open " MMANAME ".");
+        throw MLBridgeException("Cannot open " MMANAME " link.", error);
     }
 
-    //Make sure we can connect through the link.
+    //Activate the link. This blocks until the kernel is ready.
     /*
-         TODO: MLConnect can block indefinitely. We should poll MLReady until it returns true or until we timeout before trying to call MLConnect.
+         TODO: MLActivate can block indefinitely. We should poll MLReady until it returns true or until we timeout before trying to call MLActivate.
      */
-    if (MMAReady(link) == true && MMAConnect(link) == 0){
+    if(!MMAActivate(link)) ErrorCheck();
+
+    /*
+    //Make sure we can connect through the link.
+    if (MMAReady(link) != true ){
         //We're not connected.
         connected = false;
         MMAClose(link);
         MMADeinitialize(environment);
         throw MLBridgeException("Cannot connect to " MMANAME ".");
     }
-    
+    */
+
     //Link is successful.
     connected = true;
 
@@ -101,22 +108,19 @@ void MLBridge::Connect(int newArgc, const char *newArgv[]){
 void MLBridge::Disconnect(){
     if(connected){
         MMAClose(link);
-        MMADeinitialize(environment);
         connected = false;
     }
+    if(environment) MMADeinitialize(environment);
 }
 
 void MLBridge::InitializeKernel() {
     int packet;
 
     //The first thing the kernel does is send us an InputNamePacket.
-    if (!MMAReady(link)){
-        DebugPrint("Link not ready.");
-        ErrorCheck();
-    }
     packet = GetNextPacket();
     if(packet == INPUTNAMEPKT){
         inputPrompt = GetUTF8String();
+        DebugPrint("Got a prompt: " + inputPrompt);
     } else{
         //Error condition, but not ILLEGALPKT or other link/kernel error.
         throw MLBridgeException("Kernel sent an unexpected packet (" + std::to_string(packet) + ") during initial startup.");
@@ -126,10 +130,9 @@ void MLBridge::InitializeKernel() {
 
 std::string MLBridge::ReadInput(){
     std::string inputString;
-    std::string promptToUser = prompt + inputPrompt;;
+    std::string promptToUser = prompt + inputPrompt;
     if(continueInput){
         promptToUser.replace(0, promptToUser.length()-1, promptToUser.length(), ' ');
-        //promptToUser = " ";
     }
 
     /*
@@ -177,7 +180,7 @@ void MLBridge::REPL(){
     try {
         while(true){
             inputString = ReadInput();
-            if(inputString == "Exit" || inputString == "Exit[]" ) break;
+            if( inputString == "Exit" || inputString == "Exit[]" || inputString == "Quit" ) break;
             Evaluate(inputString);
             //Read and act on response from the kernel.
             ProcessKernelResponse();
@@ -195,6 +198,9 @@ std::string MLBridge::GetUTF8String(GetFunctionType func){
     int characters;
     int success = 0;
     std::string output;
+
+    //Wait until the kernel is ready.
+    WSWaitForLinkActivity(link);
     
     switch(func){
         case GetString:
@@ -231,7 +237,10 @@ std::string MLBridge::GetUTF8String(GetFunctionType func){
 
 int MLBridge::GetNextPacket(){
     int packet;
-    
+
+    //Wait until the kernel is ready.
+    WSWaitForLinkActivity(link);
+
     //MLNewPacket skips to the end of the current packet even if we are already at the end. It's never an error to call MLNewPacket(), but it is an error to call MLNextPacket if we aren't finished with the previous packet.
     if(!MMANewPacket(link)) ErrorCheck();
     packet = MMANextPacket(link);
@@ -244,7 +253,7 @@ void MLBridge::ErrorCheck(){
     int errorCode;
     std::string error;
     
-    if(!link){
+    if(link == NULL){
         throw MLBridgeException("The " MMANAME " connection has been severed.", MMAEDEAD);
     }
     errorCode = MMAError(link);
@@ -340,6 +349,7 @@ std::string MLBridge::GetKernelVersion(){
     //EvaluateWithoutMainLoop sets running to true, but we get the return string ourselves, so we leaving running = false;
     running = false;
 
+
     //Fetch the string returned by the kernel.
     if(GetNextPacket() != RETURNPKT){
         //Return an error.
@@ -431,9 +441,8 @@ bool MLBridge::ReceivedOutputNamePacket(){
     
     cout << "\n";
     if(showInOutStrings){
-        output = GetUTF8String();
-        outputPrompt = output;
-        cout << output;
+        outputPrompt = GetUTF8String();
+        cout << outputPrompt;
     }
     
     return false;

@@ -8,10 +8,12 @@ The prefix for the MathLink library is ML, while the prefix for the WSTP library
     #define MMALINK WSLINK //Special case, see below.
     #include "wstp.h"
     #define MMANAME "WSTP"
+    #define MMANAME_LOWER "wstp"
 #else
     #define MMALINK MLINK //Not MLLINK.
     #include "mathlink.h"
     #define MMANAME "MathLink"
+    #define MMANAME_LOWER "mathlink"
 #endif // @WSTP@ == true
 
 // Concatenate ML_PREFIX to NAME.
@@ -19,9 +21,8 @@ The prefix for the MathLink library is ML, while the prefix for the WSTP library
 
 //Every MathLink/WSTP function name or type required.
 #define MMAInitialize       ML_PRE(Initialize)
-#define MMAOpen             ML_PRE(Open)
 #define MMADeinitialize     ML_PRE(Deinitialize)
-#define MMAConnect          ML_PRE(Connect)
+#define MMAActivate         ML_PRE(Activate)
 #define MMAClose            ML_PRE(Close)
 #define MMAGetUTF8String    ML_PRE(GetUTF8String)
 #define MMAGetUTF8Symbol    ML_PRE(GetUTF8Symbol)
@@ -40,6 +41,8 @@ The prefix for the MathLink library is ML, while the prefix for the WSTP library
 #define MMAEnvironment      ML_PRE(Environment)
 #define MMAEOK              ML_PRE(EOK)
 #define MMAEDEAD            ML_PRE(EDEAD)
+#define MMAINTERFACE        ML_PRE(INTERFACE)
+#define MMAOpenArgcArgv     ML_PRE(OpenArgcArgv)
 
 
 #endif /* defined(__config__h__) */
