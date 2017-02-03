@@ -42,7 +42,7 @@ public:
     const char *argvdefaults[4] = {"MathLine",
         "-linklaunch",
         "-linkname",
-        "/Applications/Mathematica.app/Contents/MacOS/WolframKernel -wstp"};
+        "math -" MMANAME_LOWER};
     const char **argv = NULL;
     //Streams to use for io.
     std::ostream *pcout = &std::cout;

@@ -17,7 +17,7 @@
 #include "mlbridge.h"
 
 //Used for printf() debugging.
-bool debug = true;
+bool debug = false;
 void DebugPrint(std::string msg){
     //std::ostream &cout = *pcout;
     if(debug) std::cout << msg << "\n";
@@ -70,9 +70,9 @@ void MLBridge::Connect(int newArgc, const char *newArgv[]){
     
     //Open the link to Mathematica.
     //link = MMAOpen(argc, (char **)argv);
-    DebugPrint("Calling WSOpen...");
+    DebugPrint("Calling WSOpenArgcArgv...");
     link = MMAOpenArgcArgv( environment, argc, (char **)argv, &error);
-    DebugPrint("WSOpen returned: " + std::to_string(error));
+    DebugPrint("WSOpenArgcArgv returned: " + std::to_string(error));
     if (link == NULL || error != MMAEOK) {
         DebugPrint("Link is null or error.");
         //The link failed to open.
@@ -120,7 +120,6 @@ void MLBridge::InitializeKernel() {
     packet = GetNextPacket();
     if(packet == INPUTNAMEPKT){
         inputPrompt = GetUTF8String();
-        DebugPrint("Got a prompt: " + inputPrompt);
     } else{
         //Error condition, but not ILLEGALPKT or other link/kernel error.
         throw MLBridgeException("Kernel sent an unexpected packet (" + std::to_string(packet) + ") during initial startup.");
@@ -138,7 +137,6 @@ std::string MLBridge::ReadInput(){
     /*
      The user of this class may either use std::getline() or linenoise. The advantage of getline is that it can be used with something other than std::cin, while linenoise ignores pcin and always uses std::cin.
      */
-    
     if(useGetline){
         std::istream &cin = *pcin;
         std::ostream &cout = *pcout;
@@ -239,7 +237,7 @@ int MLBridge::GetNextPacket(){
     int packet;
 
     //Wait until the kernel is ready.
-    WSWaitForLinkActivity(link);
+    MMAWaitForLinkActivity(link);
 
     //MLNewPacket skips to the end of the current packet even if we are already at the end. It's never an error to call MLNewPacket(), but it is an error to call MLNextPacket if we aren't finished with the previous packet.
     if(!MMANewPacket(link)) ErrorCheck();

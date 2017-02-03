@@ -41,8 +41,7 @@ The prefix for the MathLink library is ML, while the prefix for the WSTP library
 #define MMAEnvironment      ML_PRE(Environment)
 #define MMAEOK              ML_PRE(EOK)
 #define MMAEDEAD            ML_PRE(EDEAD)
-#define MMAINTERFACE        ML_PRE(INTERFACE)
 #define MMAOpenArgcArgv     ML_PRE(OpenArgcArgv)
-
+#define MMAWaitForLinkActivity ML_PRE(WaitForLinkActivity)
 
 #endif /* defined(__config__h__) */
