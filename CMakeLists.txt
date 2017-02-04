@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 2.6)
 project (MathLine)
 add_executable(MathLine ${CMAKE_SOURCE_DIR}/src/main.cpp ${CMAKE_SOURCE_DIR}/src/mlbridge.cpp ${CMAKE_SOURCE_DIR}/src/linenoise.c)
-include_directories("${CMAKE_SOURCE_DIR}/src")
+include_directories("${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/build")
 
 SET( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wc++11-extensions" )
 
@@ -45,7 +45,7 @@ endif()
 
 # Configure a header file to pass some of the CMake settings
 # to the source code
-configure_file (
-		"${CMAKE_SOURCE_DIR}/src/config.h.in"
-		"${CMAKE_SOURCE_DIR}/src/config.h"
-)
+configure_file ("${CMAKE_SOURCE_DIR}/src/config.h.in" "${CMAKE_SOURCE_DIR}/build/config.h")
+
+# Installation
+install(TARGETS MathLine DESTINATION bin)
