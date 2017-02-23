@@ -1,16 +1,19 @@
-cmake_minimum_required (VERSION 2.6)
-project (MathLine)
+cmake_minimum_required(VERSION 2.6)
+project(MathLine)
 add_executable(MathLine ${CMAKE_SOURCE_DIR}/src/main.cpp ${CMAKE_SOURCE_DIR}/src/mlbridge.cpp ${CMAKE_SOURCE_DIR}/src/linenoise.c)
 include_directories("${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/build")
 
-SET( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wc++11-extensions" )
+# Enable C++11 extensions.
+target_compile_features(MathLine PRIVATE cxx_constexpr)
 
 #### FindMathematica ####
-set (CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/Mathematica" ${CMAKE_MODULE_PATH})
+cmake_policy(SET CMP0012 OLD) # Silences warnings from FindMathematica
+cmake_policy(SET CMP0011 NEW) # Silences warnings from FindMathematica
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/Mathematica" ${CMAKE_MODULE_PATH})
 # Dynamically linking to MathLink introduces a nondeterministic malloc error upon
 # exit. Statically linking seems to solve this problem. 
-set (Mathematica_USE_LIBCXX_LIBRARIES OFF)
-set (Mathematica_USE_STATIC_LIBRARIES ON)
+set(Mathematica_USE_LIBCXX_LIBRARIES OFF)
+set(Mathematica_USE_STATIC_LIBRARIES ON)
 find_package(Mathematica COMPONENTS WSTP MathLink)
 # The following is only relevant for linking dynamically to MathLink on Mac OS X.
 # We record it here for future reference.
@@ -37,15 +40,24 @@ elseif(Mathematica_MathLink_FOUND)
 	target_link_libraries(MathLine ${Mathematica_MathLink_LIBRARY})
 endif()
 
-if(APPLE)
+# Link to the correct stdlib.
+if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+	# We're on macOS X.
+	# TODO: Prior to version 10.4, use -lstdc++ in EXTRA_LIBS to link against libstdc++ instead of libc++.
 	# MathLink requires we link to CoreFoundation
 	find_library(COREFOUNDATION_LIBRARY CoreFoundation)
 	target_link_libraries(MathLine ${COREFOUNDATION_LIBRARY})
+else()
+	# The libuuid library is special. On (at least) Ubuntu libuuid.so isn't
+	# symlinked to libuuid.so.1 if libuuid-dev isn't installed. The library
+	# is there, but ld can't find -luuid.
+	find_library(UUID_LIBRARY REQUIRED NAMES uuid libuuid.so.1)
+	target_link_libraries(MathLine m pthread rt stdc++ dl ${UUID_LIBRARY})
 endif()
 
 # Configure a header file to pass some of the CMake settings
 # to the source code
-configure_file ("${CMAKE_SOURCE_DIR}/src/config.h.in" "${CMAKE_SOURCE_DIR}/build/config.h")
+configure_file("${CMAKE_SOURCE_DIR}/src/config.h.in" "${CMAKE_SOURCE_DIR}/build/config.h")
 
 # Installation
 install(TARGETS MathLine DESTINATION bin)
