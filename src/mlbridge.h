@@ -32,7 +32,8 @@ struct MLBridgeMessage{
 class MLBridge {
 public:
     //Parameters affecting how to communicate with the user and kernel.
-    std::string prompt = "";
+    std::string prompt = ""; //Supplied by the user of this MLBridge object.
+    std::string kernelPrompt; //Supplied by the kernel.
     bool useMainLoop = true;
     bool showInOutStrings = true;
     bool useGetline = false;
@@ -63,14 +64,13 @@ public:
     void Connect(int argc = 0, const char *argv[]=NULL);
     bool isConnected(){ return connected; }
     void Disconnect();
-    void Evaluate(std::string inputString);
-    //Skips the Main Loop regardless of the state of useMainLoop.
-    void EvaluateWithoutMainLoop(std::string inputString, bool eatReturnPacket = true);
+
     bool IsRunning();
     void REPL();
     void SetMaxHistory(int max = 10);
     void SetPrePrint(std::string preprintfunction);
     std::string GetKernelVersion();
+    std::string GetEvaluated(std::string expression);
     
 private:
     //Variables to keep track of state.
@@ -84,7 +84,6 @@ private:
     bool makeNewImage = true;
     //The last input string we sent to the kernel.
     std::string inputString;
-    std::string inputPrompt;
     std::string outputPrompt;
     //Syntax messages are cached. 
     std::queue<MLBridgeMessage*> messages;
@@ -96,7 +95,12 @@ private:
     std::string ReadInput();
     void PrintMessages();
     void InitializeKernel();
-    
+
+    // Evaluation with REPL.
+    void Evaluate(std::string inputString);
+    //Skips the Main Loop regardless of the state of useMainLoop.
+    void EvaluateWithoutMainLoop(std::string inputString, bool eatReturnPacket = true);
+
     //Convenience wrapper for MLGetUTF8String, etc..
     enum GetFunctionType {GetString, GetFunction, GetSymbol, GetCharacters};
     std::string GetUTF8String(GetFunctionType func = GetString);

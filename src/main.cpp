@@ -24,10 +24,13 @@ char *copyDataFromString(const std::string str){
     return newstring;
 }
 
+bool check_and_exit = false;
+
 int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
     //Parse options using boost::program_options. Much of this is boilerplate.
     opt::options_description description("All options");
     description.add_options()
+    ("check", "Establish that the connection to the kernel works, then exit.")
     ("mainloop",
      opt::value<bool>(&bridge.useMainLoop)->default_value(true),
      "Boolean. Whether or not to use the kernel's Main Loop which keeps track of session history with In[#] and Out[#] variables. Defaults to true.")
@@ -44,7 +47,7 @@ int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
      */
     ("linkname",
      opt::value<std::string>(),
-     "String. The call string to set up the link. The default works on *nix systems on which math is in the path and runnable. Defaults to \"math -" MMANAME_LOWER "\".")
+     "String. The call string to set up the link. Defaults to \"math -" MMANAME_LOWER "\".")
     ("linkmode",
      opt::value<std::string>(),
      "String. The " MMANAME " link mode. The default launches a new kernel which is almost certainly what you want. It should be possible, however, to connect to an already existing kernel. Defaults to \"linklaunch\".")
@@ -75,6 +78,9 @@ int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
     
     //Now apply the options to our MLBridge instance.
     //(We are able to apply some automatically above.)
+    if(optionsMap.count("check")){
+        check_and_exit = true;
+    }
     if(optionsMap.count("prompt")){
         bridge.prompt = optionsMap["prompt"].as<std::string>();
     }
@@ -134,7 +140,15 @@ int main(int argc, const char * argv[]) {
     if(bridge.isConnected()){
         //Let's print the kernel version.
         std::cout << "Mathematica " << bridge.GetKernelVersion() << "\n" << std::endl;
-        bridge.REPL();
+        if( check_and_exit ){
+            //Don't enter the REPL, just check and exit.
+            std::string test = "1+2";
+            std::cout << bridge.kernelPrompt << test << "\n";
+            std::cout << bridge.GetEvaluated("1+2") << std::endl;
+        }else{
+            bridge.REPL();
+        }
+
     } else{
         std::cout << "MLBridge failed to connect.";
     }

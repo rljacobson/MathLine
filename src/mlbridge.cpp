@@ -119,7 +119,7 @@ void MLBridge::InitializeKernel() {
     //The first thing the kernel does is send us an InputNamePacket.
     packet = GetNextPacket();
     if(packet == INPUTNAMEPKT){
-        inputPrompt = GetUTF8String();
+        kernelPrompt = GetUTF8String();
     } else{
         //Error condition, but not ILLEGALPKT or other link/kernel error.
         throw MLBridgeException("Kernel sent an unexpected packet (" + std::to_string(packet) + ") during initial startup.");
@@ -129,7 +129,7 @@ void MLBridge::InitializeKernel() {
 
 std::string MLBridge::ReadInput(){
     std::string inputString;
-    std::string promptToUser = prompt + inputPrompt;
+    std::string promptToUser = prompt + kernelPrompt;
     if(continueInput){
         promptToUser.replace(0, promptToUser.length()-1, promptToUser.length(), ' ');
     }
@@ -160,7 +160,7 @@ std::string MLBridge::ReadInput(){
         free(line);
     }
     
-    inputPrompt = "";
+    kernelPrompt = "";
     return inputString;
 }
 
@@ -198,7 +198,7 @@ std::string MLBridge::GetUTF8String(GetFunctionType func){
     std::string output;
 
     //Wait until the kernel is ready.
-    WSWaitForLinkActivity(link);
+    MMAWaitForLinkActivity(link);
     
     switch(func){
         case GetString:
@@ -341,9 +341,13 @@ void MLBridge::SetPrePrint(std::string preprintfunction){
     EvaluateWithoutMainLoop("$PrePrint = " + preprintfunction);
 }
 
-std::string MLBridge::GetKernelVersion(){
+std::string MLBridge::GetKernelVersion() {
+    return GetEvaluated("$Version");
+}
+
+std::string MLBridge::GetEvaluated(std::string expression){
     
-    EvaluateWithoutMainLoop("$Version", false);
+    EvaluateWithoutMainLoop(expression, false);
     //EvaluateWithoutMainLoop sets running to true, but we get the return string ourselves, so we leaving running = false;
     running = false;
 
@@ -356,20 +360,6 @@ std::string MLBridge::GetKernelVersion(){
     
     return GetUTF8String();
 }
-
-/*
-void MLBridge::EatPackets(int n){
-    int i;
-    for(i = 0; i < n; i++){
-        //Discard whatever packet we are on.
-        MLNewPacket(link);
-        //Move to next packet.
-        MLNextPacket(link);
-    }
-    //Discard the contents of the last packet eaten.
-    MLNewPacket(link);
-}
-*/
 
 bool MLBridge::IsRunning(){
     //If we never started, there's nothing to do!
@@ -412,7 +402,7 @@ bool MLBridge::ReceivedInputNamePacket(){
     DebugPrint("<INPUTNAMEPKT>");
     if(!continueInput) *pcout << "\n\n";
     if(showInOutStrings && useMainLoop){
-        inputPrompt = GetUTF8String();
+        kernelPrompt = GetUTF8String();
     }
     
     return true;
@@ -422,7 +412,7 @@ bool MLBridge::ReceivedInputNamePacket(){
 bool MLBridge::ReceivedInputPacket(){
 
     DebugPrint("<INPUTPKT>");
-    inputPrompt = GetUTF8String();
+    kernelPrompt = GetUTF8String();
     
     return true;
 }
@@ -556,7 +546,7 @@ bool MLBridge::ReceivedMenuPacket(){
     
     MMAGetInteger(link, &interruptMenuNumber);
 
-    inputPrompt = GetUTF8String();
+    kernelPrompt = GetUTF8String();
 
     //The Interrupt> menu wants text input.
     inputMode = TextMode;
