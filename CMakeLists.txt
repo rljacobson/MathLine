@@ -1,3 +1,4 @@
+# Create the project.
 cmake_minimum_required(VERSION 2.6)
 project(MathLine)
 add_executable(MathLine ${CMAKE_SOURCE_DIR}/src/main.cpp ${CMAKE_SOURCE_DIR}/src/mlbridge.cpp ${CMAKE_SOURCE_DIR}/src/linenoise.c)
@@ -11,7 +12,7 @@ cmake_policy(SET CMP0012 OLD) # Silences warnings from FindMathematica
 cmake_policy(SET CMP0011 NEW) # Silences warnings from FindMathematica
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/Mathematica" ${CMAKE_MODULE_PATH})
 # Dynamically linking to MathLink introduces a nondeterministic malloc error upon
-# exit. Statically linking seems to solve this problem. 
+# exit. Statically linking seems to solve this problem.
 set(Mathematica_USE_LIBCXX_LIBRARIES OFF)
 set(Mathematica_USE_STATIC_LIBRARIES ON)
 find_package(Mathematica COMPONENTS WSTP MathLink)
@@ -19,13 +20,6 @@ find_package(Mathematica COMPONENTS WSTP MathLink)
 # We record it here for future reference.
 # Fix MathLink shared library references under Mac OS X:
 # Mathematica_ABSOLUTIZE_LIBRARY_DEPENDENCIES(MathLine)
-
-#### Boost ####
-set(Boost_USE_STATIC_LIBS ON) 
-set(Boost_USE_STATIC_RUNTIME ON) 
-find_package(Boost COMPONENTS program_options)
-include_directories(${Boost_INCLUDE_DIRS})
-target_link_libraries(MathLine ${Boost_LIBRARIES})
 
 # Choose between WSTP and MathLink.
 if(Mathematica_WSTP_FOUND)
@@ -47,10 +41,14 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 	# MathLink requires we link to CoreFoundation
 	find_library(COREFOUNDATION_LIBRARY CoreFoundation)
 	target_link_libraries(MathLine ${COREFOUNDATION_LIBRARY})
+	if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+		# Using GCC. MathLink requires additional libraries.
+		target_link_libraries(MathLine m pthread c++ dl)
+	endif()
 else()
 	# The libuuid library is special. On (at least) Ubuntu libuuid.so isn't
-	# symlinked to libuuid.so.1 if libuuid-dev isn't installed. The library
-	# is there, but ld can't find -luuid.
+	# symlinked to libuuid.so.1 if libuuid-dev isn't installed, so ld can't
+	# find -luuid.
 	find_library(UUID_LIBRARY REQUIRED NAMES uuid libuuid.so.1)
 	target_link_libraries(MathLine m pthread rt stdc++ dl ${UUID_LIBRARY})
 endif()

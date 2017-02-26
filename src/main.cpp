@@ -6,11 +6,8 @@
 //
 
 #include <iostream>
-#include <boost/program_options.hpp>
+#include "popl.hpp"
 #include "mlbridge.h"
-
-//Shortened for convenience.
-namespace opt = boost::program_options;
 
 #define CONTINUE 0
 #define QUIT_WITH_SUCCESS 1
@@ -27,89 +24,82 @@ char *copyDataFromString(const std::string str){
 bool check_and_exit = false;
 
 int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
-    //Parse options using boost::program_options. Much of this is boilerplate.
-    opt::options_description description("All options");
-    description.add_options()
-    ("check", "Establish that the connection to the kernel works, then exit.")
-    ("mainloop",
-     opt::value<bool>(&bridge.useMainLoop)->default_value(true),
-     "Boolean. Whether or not to use the kernel's Main Loop which keeps track of session history with In[#] and Out[#] variables. Defaults to true.")
-    ("prompt",
-     opt::value<std::string>(),
-     "String. The prompt presented to the user for input. When inoutstrings is true, this is typically the empty string.")
-    ("inoutstrings",
-     opt::value<bool>(&bridge.showInOutStrings)->default_value(true),
-     "Boolean. Whether or not to print the \"In[#]:=\" and \"Out[#]=\" strings. When mainloop is false this option does nothing. Defaults to true.")
-    /* This is silly. The user can just set $PrePrint herself.
-     ("preprint",
-     opt::value<std::string>(),
-     "String. This option sets $PrePrint to the given value which affects how the output is displayed. Defaults to InputForm.")
-     */
-    ("linkname",
-     opt::value<std::string>(),
-     "String. The call string to set up the link. Defaults to \"math -" MMANAME_LOWER "\".")
-    ("linkmode",
-     opt::value<std::string>(),
-     "String. The " MMANAME " link mode. The default launches a new kernel which is almost certainly what you want. It should be possible, however, to connect to an already existing kernel. Defaults to \"linklaunch\".")
-    ("usegetline",
-     opt::value<bool>(&bridge.useGetline)->default_value(false),
-     "Boolean. If set to false, we use readline-like input with command history and emacs-style editing capability. If set to true, we use a simplified getline input with limited editing capability. Defaults to false.")
-    ("maxhistory",
-     opt::value<int>()->default_value(10),
-     "Integer (nonnegative). The maximum number of lines to keep in the input history. Defaults to 10.")
-    ("help", "Produce help message.")
-    ;
-    opt::variables_map optionsMap;
+
+    popl::Switch helpOption("h", "help", "Produce help message.");
+    popl::Switch checkOption("c", "check", "Establish that the connection to the kernel\nworks, then exit.");
+    popl::Value<bool> mainloopOption("m", "mainloop",
+                                     "Boolean. Whether or not to use the kernel's\nMain Loop which keeps track of session\nhistory with In[#] and Out[#] variables.\nDefaults to true.", true, &bridge.useMainLoop);
+    popl::Value<std::string> promptOption("p", "prompt", "String. The prompt presented to the user for\ninput. When inoutstrings is true, this is\ntypically the empty string.", "", &bridge.prompt);
+    popl::Value<bool> iostringsOption("i", "inoutstrings", "Boolean. Whether or not to print the \n\"In[#]:=\" and \"Out[#]=\" strings. When\nmainloop is false this option does nothing.\nDefaults to true.", true, &bridge.showInOutStrings);
+    popl::Value<std::string> linknameOption("n", "linkname", "String. The call string to set up the link.\nDefaults to \"math -" MMANAME_LOWER "\".", "math -" MMANAME_LOWER);
+    popl::Value<std::string> linkmodeOption("l", "linkmode", "String. The " MMANAME " link mode. The default\nlaunches a new kernel which is almost\ncertainly what you want. It should be\npossible, however, to connect to a pre\nexisting kernel. Defaults to \"linklaunch\".", "linklaunch");
+    popl::Value<bool> getlineOption("g", "usegetline", "Boolean. If set to false, we use readline-\nlike input with command history and emacs-\nstyle editing capability. If set to true, we\nuse a simplified getline input with limited\nediting capability. Defaults to false.", false, &bridge.useGetline);
+    popl::Value<int> maxhistoryOption("x", "maxhistory", "Integer (nonnegative). The maximum number of\nlines to keep in the input history.Defaults\nto 10.", 10);
+
+    popl::OptionParser op("MathLine Usage");
+    op.add(helpOption)
+            .add(checkOption)
+            .add(mainloopOption)
+            .add(promptOption)
+            .add(iostringsOption)
+            .add(linknameOption)
+            .add(linkmodeOption)
+            .add(getlineOption)
+            .add(maxhistoryOption);
+
+    // Parse the options.
     try{
-        opt::store(opt::parse_command_line(argc, argv, description), optionsMap);
-        
-        if ( optionsMap.count("help")){
-            std::cout << "MathLine Usage.\n" << description << std::endl;
-            return QUIT_WITH_SUCCESS;
-        }
-        //Since notify can throw an exception, we call it AFTER possibly displaying the help message.
-        opt::notify(optionsMap);
-    }
-    catch(opt::error &e){
-        std::cerr << "ERROR: " << e.what() << "\n\n";
-        std::cerr << description << std::endl;
+        op.parse(argc, argv);
+    }catch (std::invalid_argument e){
+        std::cout << "Error: " << e.what() << ".\n";
+        std::cout << op << std::endl;
+        return QUIT_WITH_ERROR;
+    };
+
+    //Check for unknown options.
+    if( op.unknownOptions().size() > 0) {
+        for (size_t n = 0; n < op.unknownOptions().size(); ++n)
+            std::cout << "Unknown option: " << op.unknownOptions()[n] << "\n";
+        std::cout << op << std::endl;
         return QUIT_WITH_ERROR;
     }
-    
+    //Print help message and exit.
+    if ( helpOption.isSet() ){
+        std::cout << op << std::endl;
+        return QUIT_WITH_SUCCESS;
+    }
+
     //Now apply the options to our MLBridge instance.
     //(We are able to apply some automatically above.)
-    if(optionsMap.count("check")){
+    if(checkOption.isSet()){
         check_and_exit = true;
     }
-    if(optionsMap.count("prompt")){
-        bridge.prompt = optionsMap["prompt"].as<std::string>();
-    }
-    if(optionsMap.count("linkname")){
-        std::string str = optionsMap["linkname"].as<std::string>();
+    if(linknameOption.isSet()){
+        std::string str = linknameOption.getValue();
         if(str.empty()){
             //Empty string. Ignore this option.
             std::cout << "Option linkname cannot be empty. Ignoring." << std::endl;
         } else{
-            //Make a copy, because optionsMap will go out of scope and free the linkname before we can connect with it.
+            //Make a copy, because linknameOption will go out of scope and free the linkname before we can connect with it.
             bridge.argv[3] = copyDataFromString(str);
         }
     }
-    if(optionsMap.count("linkmode")){
-        std::string str = optionsMap["linkmode"].as<std::string>();
+    if(linkmodeOption.isSet()){
+        std::string str = linkmodeOption.getValue();
         if(str.empty()){
             //Empty string. Ignore this option.
             std::cout << "Option linkmode cannot be empty. Ignoring." << std::endl;
         } else{
-            //Make a copy, because optionsMap will go out of scope and free the linkname before we can connect with it.
+            //Make a copy, because linkmodeOption will go out of scope and free the linkmode before we can connect with it.
             bridge.argv[1] = copyDataFromString("-" + str);
         }
     }
-    if(optionsMap.count("maxhistory")){
-        int max = optionsMap["maxhistory"].as<int>();
+    if(maxhistoryOption.isSet()){
+        int max = maxhistoryOption.getValue();
         if (max >= 0) {
             bridge.SetMaxHistory(max);
         } else{
-            std::cout << "Option maxhistory must be nonnegative." << std::endl;
+            std::cout << "Option maxhistory must be nonnegative. Ignoring." << std::endl;
         }
     }
 
@@ -126,6 +116,7 @@ int main(int argc, const char * argv[]) {
     //Parse the command line arguments.
     int parseFailed = ParseProgramOptions(bridge, argc, argv);
     if (parseFailed) {
+        // An unknown argument was supplied, so we exit.
         return parseFailed;
     }
     

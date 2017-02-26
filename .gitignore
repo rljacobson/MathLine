@@ -1,8 +1,11 @@
 #
 wstp.h
+mathlink.h
 build
 .idea
 MathLine
+*.tar.gz
+spkg
 
 ## CMake generated files.
 *.cbp
