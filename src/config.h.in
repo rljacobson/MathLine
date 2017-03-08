@@ -1,6 +1,8 @@
 #ifndef __config__h__
 #define __config__h__
 
+#define MATHLINE_VERSION "1.0"
+
 /*
 The prefix for the MathLink library is ML, while the prefix for the WSTP library is WS. This is a headache that we solve by using a prefix of MMA in the code and using defines to select the correct library at compile time.
 */

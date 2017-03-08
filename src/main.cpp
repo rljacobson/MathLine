@@ -108,7 +108,7 @@ int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
 
 int main(int argc, const char * argv[]) {
     //Banner
-    std::cout << "MathLine: A free and open source textual interface to Mathematica." << std::endl;
+    std::cout << "MathLine v" MATHLINE_VERSION ": A free and open source textual interface to Mathematica." << std::endl;
     
     //Passing false tells the MLBridge that we are going to set up the link options and connect manually. Otherwise it would choose reasonable defaults for us.
     MLBridge bridge(false);
