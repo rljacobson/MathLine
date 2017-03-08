@@ -29,7 +29,7 @@ The kernel might be called `MathKernel` or something else on different systems. 
 
 If you want MathLine to start a kernel different from the default ("`math -wstp`"), use the `--linkname` option:
 
-`$ MathLine --linkname "/path/to/kernel -wstp"`
+`$ mathline --linkname "/path/to/kernel -wstp"`
 
 ### WSTP or MathLink?
 
@@ -39,7 +39,7 @@ WSTP stands for Wolfram Symbolic Transfer Protocol. In Mathematica v10 Wolfram c
 
 MathLine will use reasonable defaults if invoked without arguments.   
 
-`$ MathLine [--option arg ]*`
+`$ mathline [--option arg ]*`
 
 If you get, 
 ```
@@ -78,7 +78,7 @@ make
 ```
 CMake will select WSTP or MathLink automatically. If all goes well you should have a MathLine binary sitting in the build directory. To install it: 
 
-`make install`
+```make install```
 
 ## Building with GenMakefile.py
 This is not supported or recommended. If you don't have CMake, there is an included Python script that will generate an appropriate Makefile for you, automatically selecting WSTP or MathLink depending on your Mathematica version. This script assumes that Mathematica is installed on your computer with a command line interface that runs when you give the `math` command at the terminal. (See the section "Preparing your environment" above.) To use the script, do the following:
@@ -95,6 +95,7 @@ You can also build it the hard way. (Adapt these instructions in the obvious way
 # Missing Features
 For those looking to enhance this code, here are some possibilities. These are features that the textual interface doesn't have but should. Someone should contribute the code.
 
+* Implement scripting, i.e., `mathline --script file.m` executes the code in file.m and exits. (Easy.)
 * Intelligently display output formatted with ToString. (Easy, but I can't figure it out, so hard?)
 * The code makes reasonable choices for when to print newline characters. However, this should probably be configurable, say, by printing "preprint" and "postprint" strings around each printed string. (Easy.)
 * Implement autocompletion of names and contexts using something similar to this code which is similar to what JMath uses:<br>
