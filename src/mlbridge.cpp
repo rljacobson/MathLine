@@ -33,29 +33,31 @@ std::string MLBridgeException::ToString(){
 }
 
 
-MLBridge::MLBridge(bool connect){
+MLBridge::MLBridge(){
     SetMaxHistory();
     argv = argvdefaults;
-    
-    //connect defaults to true.
-    if(connect) Connect();
+}
+
+MLBridge::MLBridge(int newArgc, const char *newArgv[]){
+    SetMaxHistory();
+    argc = newArgc;
+    argv = newArgv;
 }
 
 MLBridge::~MLBridge(){
     Disconnect();
 }
 
-
 void MLBridge::Connect(int newArgc, const char *newArgv[]){
+    argc = newArgc;
+    argv = newArgv;
+    Connect();
+}
+
+void MLBridge::Connect(){
     int error = MMAEOK;
     connected = false;
 
-    //argc/argv have empty default values.
-    //If parameters are specified, use them.
-    if(newArgc!=0 && newArgv!=NULL){
-        argc = newArgc;
-        argv = newArgv;
-    }
     //If no parameters are specified and this has no default parameters, bail.
     if(argc==0 || argv==NULL){
         throw MLBridgeException("No " MMANAME " parameters specified for the connection.");
@@ -460,8 +462,7 @@ bool MLBridge::ReceivedReturnExpressionPacket(){
     cout << GetUTF8String() << std::endl;
 
     //If we are using the Main Loop, we expect more packets from the kernel, so we keep done=false.
-    if (!useMainLoop) return true;
-    return false;
+    return !useMainLoop;
 }
 
 //This packet typically contains the message (string) describing a syntax error.

@@ -57,11 +57,12 @@ public:
     std::queue<std::string> images;
     
     
-    MLBridge(bool connect=true);
+    MLBridge();
     MLBridge(int argc, const char *argv[]);
     ~MLBridge();
 
-    void Connect(int argc = 0, const char *argv[]=NULL);
+    void Connect(int argc, const char *argv[]);
+    void Connect();
     bool isConnected(){ return connected; }
     void Disconnect();
 
