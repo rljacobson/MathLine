@@ -13,7 +13,7 @@
 #define QUIT_WITH_SUCCESS 1
 #define QUIT_WITH_ERROR 2
 
-//Why is this not part of std::string?!
+//Why is this not part of std::string?
 char *copyDataFromString(const std::string str){
     char * newstring = new char[str.size() + 1];
     std::copy(str.begin(), str.end(), newstring);
@@ -109,9 +109,8 @@ int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
 int main(int argc, const char * argv[]) {
     //Banner
     std::cout << "MathLine v" MATHLINE_VERSION ": A free and open source textual interface to Mathematica." << std::endl;
-    
-    //Passing false tells the MLBridge that we are going to set up the link options and connect manually. Otherwise it would choose reasonable defaults for us.
-    MLBridge bridge(false);
+
+    MLBridge bridge;
     
     //Parse the command line arguments.
     int parseFailed = ParseProgramOptions(bridge, argc, argv);

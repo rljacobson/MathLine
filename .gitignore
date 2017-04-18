@@ -31,7 +31,6 @@ cmake-build-debug
 *.obj
 *.elf
 *.slo
-*.lo
 
 # Linker output
 *.ilk

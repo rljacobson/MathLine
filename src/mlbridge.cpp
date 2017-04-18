@@ -10,9 +10,12 @@
 //        a macro. See config.h for details.
 
 #include <iostream>
-#include <string>
-#include <signal.h>
-#include <stdlib.h> //Needed to free() memory linenoise allocat with malloc().
+#include <wstp.h>
+
+// TODO: Handle signal interrupts correctly.
+//#include <signal.h>
+//TODO: Determine if stdlib is needed to free() memory linenoise allocates with malloc().
+//#include <stdlib.h>
 #include "linenoise.h"
 #include "mlbridge.h"
 
@@ -312,8 +315,11 @@ void MLBridge::Evaluate(std::string inputString){
 
 void MLBridge::EvaluateWithoutMainLoop(std::string inputString, bool eatReturnPacket){
     // This function always circumvents the kernel's Main Loop. Use it for setting $PrePrint for example.
-    
-    
+
+    if(!isConnected()){
+        throw MLBridgeException("Tried to evaluate without being connected to a kernel.");
+    }
+
     //We record the inputString so that we can reference it later, for example, in the event of a syntax error.
     if(continueInput){
         inputString = this->inputString.append(inputString);
@@ -674,6 +680,7 @@ void MLBridge::ProcessKernelResponse() {
         //Get the next packet.
         int packet = GetNextPacket();
 
+        // TODO: Received*Packet() returns a bool indicating whether or not the loop in this method should continue. That's stupid. Those bools should exist in the case statements themselves, and Received*Packet() should just process the received packet.
         switch (packet) {
             case INPUTNAMEPKT:
                 done = ReceivedInputNamePacket();
