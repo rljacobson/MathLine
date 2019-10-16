@@ -65,7 +65,7 @@ CMake is used to locate the WSTP/MathLink header and library and is the recommen
 You will need a functional installation of Mathematica. To build MathLine, your Mathematica installation must include the WSTP or MathLink DeveloperKit. (By default, Mathematica installs both.) Of course the Mathematica kernel (Wolfram kernel) is necessary at runtime for MathLine to be of any use. 
 
 # Building
-Math sure that Mathematica is installed on the build system (including the WSTP/MathLink DeveloperKit). 
+Make sure that Mathematica is installed on the build system (including the WSTP/MathLink DeveloperKit).
 
 ## Building with CMake
 If you have CMake on your system, the project includes CMake files that do all of the hard stuff for you. On most systems just execute the following in the root directory of the project:
@@ -81,6 +81,7 @@ CMake will select WSTP or MathLink automatically. If all goes well you should ha
 ```make install```
 
 ## Building with GenMakefile.py
+
 This is not supported or recommended. If you don't have CMake, there is an included Python script that will generate an appropriate Makefile for you, automatically selecting WSTP or MathLink depending on your Mathematica version. This script assumes that Mathematica is installed on your computer with a command line interface that runs when you give the `math` command at the terminal. (See the section "Preparing your environment" above.) To use the script, do the following:
 
 ```
@@ -89,7 +90,7 @@ mkdir build
 ```
 If the build is successful, the MathLine binary will be in the build directory. If you omit the `-runMake`, the script will output the Makefile without running `make`.
 
-##Building manually
+## Building manually
 You can also build it the hard way. (Adapt these instructions in the obvious way for MathLink.) Build it like any other WSTP C/C++ program: Make sure `wstp.h` (shipped with Mathematica) is available in your include search path and link the binary to Mathematica's WSTP library (`libWSTPi4.a` on my system).
 
 # Missing Features
@@ -110,7 +111,7 @@ The last few items in the list above are features of [JMath](http://robotics.cal
 
 Author(s): Robert Jacobson \<rljacobson gmail\>
 
-License: BSD license. See the file LICENSE.txt for details. Note that this license applies ONLY to the MathLine source code. At compile time MathLine links against the MathLink/WSTP library which use and distribution is governed by a separate non free license. It is your responsibility to ensure your use of the linked MathLine binary is in compliance with the MathLink/WSTP license.   
+License: BSD license. See the file LICENSE.txt for details. Note that this license applies ONLY to the MathLine source code. At compile time MathLine links against the MathLink/WSTP library which use and distribution is governed by a separate non-free license. It is your responsibility to ensure your use of the linked MathLine binary is in compliance with the MathLink/WSTP license.
 
 This software includes linenoise ([http://github.com/antirez/linenoise](http://github.com/antirez/linenoise)), a readline-like library by Salvatore Sanfilippo and Pieter Noordhuis released under the BSD license. See LICENSE-linenoise.txt for more information.
 
