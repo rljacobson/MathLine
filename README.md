@@ -24,7 +24,7 @@ If that does nothing, the easiest thing to do is create a bash script named `mat
 /path/to/WolframKernel $@
 ```
 The kernel might be called `MathKernel` or something else on different systems. On my system (macOS Sierra, Mathematica v11.01), the path to the kernel is:
- 
+
 `/Applications/Mathematica.app/Contents/MacOS/WolframKernel`
 
 If you want MathLine to start a kernel different from the default ("`math -wstp`"), use the `--linkname` option:
@@ -57,12 +57,74 @@ Option| Description
  ` --usegetline arg (=0)`   |Boolean. If set to false, we use readline-like input with command history and emacs-style editing capability. If set to true, we use a simplified getline input with limited editing capability. Try setting this to true if MathLine connects to a kernel but doesn't give a correct prompt. Defaults to false.
   `--maxhistory arg (=10)`  |Integer (nonnegative). The maximum number of lines to keep in the input history. Defaults to 10.
   `--help`                  |Produce help message.
-  
+
+## Using with Python’s  `Pexpect` and Similar Usages
+
+MathLine was motivated by the need for a stable Mathematica frontend that could be used with pipes, for example, to communicate with a Mathematica kernel using `pexpect` in Python. Here is a minimal example:
+
+```python
+import sys
+import re
+import pexpect
+
+# Configure how to start MathLine. We ask MathLine to use the easier-to-recognize
+# prompt '>>> ' and to not output 'In[n]:= ' and 'Out[n]='.
+mathline_path = "/path/to/mathline"
+command = mathline_path + ' -g true -i false -p ">>> "'
+prompt = '>>> '
+
+# Spawn the MathLine instance.
+child = pexpect.spawn(command, encoding='utf-8', timeout=5, echo=False)
+
+# Expect the prompt '>>> '.
+child.expect(prompt)
+# Send a Mathematica expression to evaluate. In this case, we check the equivalence
+# of two representations of a Taxicab Number.
+child.sendline('17492496^3 + 26590452^3 == 18289922^3 + 26224366^3')
+# Read everything up to the next prompt.
+child.expect(prompt)
+# Display  the output.
+print(child.before.strip())
+
+# Tell MathLine and Mathematica to exit.
+child.sendline('Exit[]')
+# Close the pexpect link.
+child.close()
+```
+
+One could also use `pexpect`’s built-in `REPLWrapper` object as in the following. 
+
+```python
+import sys
+import re
+import pexpect
+# This time we also import REPLWrapper.
+from pexpect.replwrap import REPLWrapper
+
+# Same as before, changing the prompt to '>>> '.
+mathline_path = "/Users/rjacobson/Development/mathline/cmake-build-debug/mathline"
+command = mathline_path + ' -g true -i false -p ">>> "'
+prompt = '>>> '
+
+# Spawn the MathLine instance.
+child = pexpect.spawn(command, encoding='utf-8', timeout=5, echo=False)
+# Create a `REPLWrapper` object that looks for our predefined prompt.
+wl_repl = REPLWrapper(child, '>>> ', prompt_change=None, continuation_prompt=u'         ')
+
+# Give the REPL an expression to evaluate and print the result.
+print(wl_repl.run_command('2^32-17').strip())
+
+child.sendline('Exit[]')
+child.close()
+```
+
+Note that with `REPLWrapper`, changing the prompt is not optional, as `REPLWrapper` uses `expect_exact()`, meaning it does not accept regular expressions. In other words, we can’t use a prompt that changes, as `In[n]:= ` does. Also, in both examples we simultaneously *disabled* the in-out strings—a requirement for `REPLWrapper` but merely optional in the first example.
 
 ## Dependencies
-CMake is used to locate the WSTP/MathLink header and library and is the recommended way to build MathLine. Those users without cmake on their system will have to either use the included Python script to generate a make file or determine the magic build incantation themselves. 
 
-You will need a functional installation of Mathematica. To build MathLine, your Mathematica installation must include the WSTP or MathLink DeveloperKit. (By default, Mathematica installs both.) Of course the Mathematica kernel (Wolfram kernel) is necessary at runtime for MathLine to be of any use. 
+**Compile Time:** CMake is used to locate the WSTP/MathLink header and library and is the recommended way to build MathLine. Those users without cmake on their system will have to either use the included Python script to generate a make file or determine the magic build incantation themselves. 
+
+**Run Time:** You will need a functional installation of Mathematica. To build MathLine, your Mathematica installation must include the WSTP or MathLink DeveloperKit. (By default, Mathematica installs both.) Of course the Mathematica kernel (Wolfram kernel) is necessary at runtime for MathLine to be of any use. 
 
 # Building
 Make sure that Mathematica is installed on the build system (including the WSTP/MathLink DeveloperKit).
