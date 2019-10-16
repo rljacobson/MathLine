@@ -76,3 +76,6 @@ Module.symvers
 Mkfile.old
 dkms.conf
 config.h
+
+# include *.cmd in CMake folder
+!CMake/Mathematica/*.cmd

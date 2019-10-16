@@ -13,6 +13,7 @@
 #define NOMINMAX
 
 #include <string.h>
+#include <algorithm>
 #include <vector>
 #include <iostream>
 #include <sstream>
