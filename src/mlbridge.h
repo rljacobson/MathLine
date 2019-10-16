@@ -1,3 +1,5 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "hicpp-avoid-c-arrays"
 //
 //  mlbridge.h
 //  MathLinkBridge
@@ -6,19 +8,19 @@
 //  Copyright (c) 2014 Robert Jacobson. All rights reserved.
 //
 
-#ifndef __MathLinkBridge__mlbridge__
-#define __MathLinkBridge__mlbridge__
+#pragma once
 
 #include <iostream>
 #include <string>
 #include <queue>
+#include <exception>
 
 #include "config.h"
 
-struct MLBridgeException{
-    std::string errorMsg;
-    int errorCode;
+struct MLBridgeException: public std::exception{
     MLBridgeException(std::string errorMsg, int errorCode = 0);
+    int errorCode;
+    std::string errorMsg;
     std::string ToString();
 };
 
@@ -32,19 +34,18 @@ struct MLBridgeMessage{
 class MLBridge {
 public:
     //Parameters affecting how to communicate with the user and kernel.
-    std::string prompt = ""; //Supplied by the user of this MLBridge object.
-    std::string kernelPrompt; //Supplied by the kernel.
+    std::string prompt{""}; //Supplied by the user of this MLBridge object.
+    std::string kernelPrompt{""}; //Supplied by the kernel.
     bool useMainLoop = true;
     bool showInOutStrings = true;
     bool useGetline = false;
     
     int argc = 4;
-    //Oh god, what's the right way to do this?
     const char *argvdefaults[4] = {"MathLine",
         "-linklaunch",
         "-linkname",
         "math -" MMANAME_LOWER};
-    const char **argv = NULL;
+    const char **argv = nullptr;
     //Streams to use for io.
     std::ostream *pcout = &std::cout;
     std::istream *pcin = &std::cin;
@@ -63,15 +64,15 @@ public:
 
     void Connect(int argc, const char *argv[]);
     void Connect();
-    bool isConnected(){ return connected; }
+    bool IsConnected(){ return connected; }
     void Disconnect();
 
     bool IsRunning();
     void REPL();
     void SetMaxHistory(int max = 10);
-    void SetPrePrint(std::string preprintfunction);
+    void SetPrePrint(const std::string &preprintfunction);
     std::string GetKernelVersion();
-    std::string GetEvaluated(std::string expression);
+    std::string GetEvaluated(const std::string &expression);
     
 private:
     //Variables to keep track of state.
@@ -81,7 +82,7 @@ private:
     bool continueInput = false;
     enum {ExpressionMode, TextMode} inputMode = ExpressionMode;
     //Holds the image data (postscript code) as we receive it from the kernel until we have it all.
-    std::string *image = NULL;
+    std::string *image = nullptr;
     bool makeNewImage = true;
     //The last input string we sent to the kernel.
     std::string inputString;
@@ -89,8 +90,8 @@ private:
     //Syntax messages are cached. 
     std::queue<MLBridgeMessage*> messages;
     
-    MMALINK link = NULL;
-    MMAEnvironment environment = NULL;
+    MMALINK link = nullptr;
+    MMAEnvironment environment = nullptr;
     
     void ErrorCheck();
     std::string ReadInput();
@@ -98,9 +99,9 @@ private:
     void InitializeKernel();
 
     // Evaluation with REPL.
-    void Evaluate(std::string inputString);
+    void Evaluate(const std::string &input);
     //Skips the Main Loop regardless of the state of useMainLoop.
-    void EvaluateWithoutMainLoop(std::string inputString, bool eatReturnPacket = true);
+    void EvaluateWithoutMainLoop(const std::string &input, bool eatReturnPacket = true);
 
     //Convenience wrapper for MLGetUTF8String, etc..
     enum GetFunctionType {GetString, GetFunction, GetSymbol, GetCharacters};
@@ -129,4 +130,4 @@ private:
     void ProcessKernelResponse();
 };
 
-#endif /* defined(__MathLinkBridge__mlbridge__) */
+#pragma clang diagnostic pop

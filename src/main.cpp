@@ -1,3 +1,5 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "hicpp-avoid-c-arrays"
 //
 //  MathLine
 //
@@ -13,12 +15,12 @@
 #define QUIT_WITH_SUCCESS 1
 #define QUIT_WITH_ERROR 2
 
-//Why is this not part of std::string?
-char *copyDataFromString(const std::string str){
-    char * newstring = new char[str.size() + 1];
-    std::copy(str.begin(), str.end(), newstring);
-    newstring[str.size()] = '\0';
-    return newstring;
+/// Copy `std::string` into an owning C-style string.
+char *copyDataFromString(const std::string &str){
+    char *new_string = new char[str.size() + 1];
+    std::copy(str.begin(), str.end(), new_string);
+    new_string[str.size()] = '\0';
+    return new_string;
 }
 
 bool check_and_exit = false;
@@ -50,16 +52,16 @@ int ParseProgramOptions(MLBridge &bridge, int argc, const char * argv[]){
     // Parse the options.
     try{
         op.parse(argc, argv);
-    }catch (std::invalid_argument e){
+    }catch (std::invalid_argument &e){
         std::cout << "Error: " << e.what() << ".\n";
         std::cout << op << std::endl;
         return QUIT_WITH_ERROR;
     };
 
     //Check for unknown options.
-    if( op.unknownOptions().size() > 0) {
-        for (size_t n = 0; n < op.unknownOptions().size(); ++n)
-            std::cout << "Unknown option: " << op.unknownOptions()[n] << "\n";
+    if( !op.unknownOptions().empty()) {
+        for(const auto &n : op.unknownOptions())
+            std::cout << "Unknown option: " << n << "\n";
         std::cout << op << std::endl;
         return QUIT_WITH_ERROR;
     }
@@ -114,7 +116,7 @@ int main(int argc, const char * argv[]) {
     
     //Parse the command line arguments.
     int parseFailed = ParseProgramOptions(bridge, argc, argv);
-    if (parseFailed) {
+    if (CONTINUE != parseFailed) {
         // An unknown argument was supplied, so we exit.
         return parseFailed;
     }
@@ -122,12 +124,12 @@ int main(int argc, const char * argv[]) {
     //Attempt to establish the MathLink connection using the options we've set.
     try{
         bridge.Connect();
-    } catch(MLBridgeException e){
+    } catch(MLBridgeException &e){
         std::cerr << e.ToString() << "\n";
         std::cerr << "Could not connect to Mathematica. Check that " << bridge.argv[3] << " works from a command line." << std::endl;
         return 1;
     }
-    if(bridge.isConnected()){
+    if(bridge.IsConnected()){
         //Let's print the kernel version.
         std::cout << "Mathematica " << bridge.GetKernelVersion() << "\n" << std::endl;
         if( check_and_exit ){
@@ -145,3 +147,5 @@ int main(int argc, const char * argv[]) {
         
     return 0;
 }
+
+#pragma clang diagnostic pop

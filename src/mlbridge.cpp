@@ -1,3 +1,5 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "hicpp-avoid-c-arrays"
 //
 //  mlbridge.cpp
 //  MathLinkBridge
@@ -10,6 +12,7 @@
 //        a macro. See config.h for details.
 
 #include <iostream>
+#include <utility>
 #include <wstp.h>
 
 // TODO: Handle signal interrupts correctly.
@@ -21,13 +24,15 @@
 
 //Used for printf() debugging.
 bool debug = false;
-void DebugPrint(std::string msg){
+void DebugPrint(const std::string &msg){
     //std::ostream &cout = *pcout;
     if(debug) std::cout << msg << "\n";
 }
 
 
-MLBridgeException::MLBridgeException(std::string error, int errorCode): errorMsg(error), errorCode(errorCode){
+MLBridgeException::MLBridgeException(std::string error, int errorCode):
+    errorMsg(std::move(error)),
+    errorCode(errorCode){
     //Pass.
 }
 
@@ -62,13 +67,13 @@ void MLBridge::Connect(){
     connected = false;
 
     //If no parameters are specified and this has no default parameters, bail.
-    if(argc==0 || argv==NULL){
+    if(argc==0 || argv==nullptr){
         throw MLBridgeException("No " MMANAME " parameters specified for the connection.");
     }
     
     //Initialize the link to Mathematica.
-    environment = MMAInitialize(NULL);
-    if(environment == NULL){
+    environment = MMAInitialize(nullptr);
+    if(environment == nullptr){
         //Failed to initialize the link.
         throw MLBridgeException("Cannot initialize " MMANAME ".");
     }
@@ -78,8 +83,8 @@ void MLBridge::Connect(){
     DebugPrint("Calling WSOpenArgcArgv...");
     link = MMAOpenArgcArgv( environment, argc, (char **)argv, &error);
     DebugPrint("WSOpenArgcArgv returned: " + std::to_string(error));
-    if (link == NULL || error != MMAEOK) {
-        DebugPrint("Link is null or error.");
+    if (link == nullptr || error != MMAEOK) {
+        DebugPrint("Link is nullptr or error.");
         //The link failed to open.
         connected = false;
         MMADeinitialize(environment);
@@ -133,8 +138,15 @@ void MLBridge::InitializeKernel() {
 }
 
 std::string MLBridge::ReadInput(){
-    std::string inputString;
-    std::string promptToUser = prompt + kernelPrompt;
+    std::string input;
+    std::string promptToUser;
+    
+    if(showInOutStrings){
+        promptToUser = prompt + kernelPrompt;
+    } else{
+        promptToUser = prompt;
+    }
+    
     if(continueInput){
         promptToUser.replace(0, promptToUser.length()-1, promptToUser.length(), ' ');
     }
@@ -148,7 +160,7 @@ std::string MLBridge::ReadInput(){
         
         cout << promptToUser;
         
-        std::getline(cin, inputString);
+        std::getline(cin, input);
         //Check the status of cin.
         if (!cin.good()){
             //A ctrl+c event inside of getline introduces an internal error in cin. We attempt to clear the error.
@@ -161,12 +173,12 @@ std::string MLBridge::ReadInput(){
         char *line;
         line = linenoise(promptToUser.data());
         linenoiseHistoryAdd(line);
-        inputString = std::string(line);
+        input = std::string(line);
         free(line);
     }
     
     kernelPrompt = "";
-    return inputString;
+    return input;
 }
 
 void MLBridge::SetMaxHistory(int max){
@@ -177,26 +189,26 @@ void MLBridge::SetMaxHistory(int max){
 
 void MLBridge::REPL(){
     std::ostream &cout = *pcout;
-    std::string inputString;
+    std::string input;
     
     //For convenience we wrap everything in a try-block. However, some errors are recoverable. Though we do not do this, one could attempt to clear the error and restart the REPL.
     try {
         while(true){
-            inputString = ReadInput();
-            if( inputString == "Exit" || inputString == "Exit[]" || inputString == "Quit" ) break;
-            Evaluate(inputString);
+            input = ReadInput();
+            if( input == "Exit" || input == "Exit[]" || input == "Quit" ) break;
+            Evaluate(input);
             //Read and act on response from the kernel.
             ProcessKernelResponse();
         }
-    } catch (MLBridgeException e) {
+    } catch (MLBridgeException &e) {
         cout << e.ToString() << std::endl;
     }
 }
 
 std::string MLBridge::GetUTF8String(GetFunctionType func){
     //func defaults to GetString.
-    //MLGetUTF8String does NOT null terminate the string.
-    const unsigned char *stringBuffer = NULL;
+    //MLGetUTF8String does NOT nullptr terminate the string.
+    const unsigned char *stringBuffer = nullptr;
     int bytes = 0;
     int characters;
     int success = 0;
@@ -256,7 +268,7 @@ void MLBridge::ErrorCheck(){
     int errorCode;
     std::string error;
     
-    if(link == NULL){
+    if(link == nullptr){
         throw MLBridgeException("The " MMANAME " connection has been severed.", MMAEDEAD);
     }
     errorCode = MMAError(link);
@@ -276,13 +288,13 @@ void MLBridge::ErrorCheck(){
     }
 }
 
-void MLBridge::Evaluate(std::string inputString){
-    //We record the inputString so that we can reference it later, for example, in the event of a syntax error.
+void MLBridge::Evaluate(const std::string &input){
+    //We record the input so that we can reference it later, for example, in the event of a syntax error.
     if(continueInput){
-        inputString = this->inputString.append(inputString);
+        inputString.append(input);
         continueInput = false;
     } else{
-        this->inputString = inputString;
+        inputString = input;
     }
     
     /*
@@ -313,19 +325,19 @@ void MLBridge::Evaluate(std::string inputString){
     running = true;
 }
 
-void MLBridge::EvaluateWithoutMainLoop(std::string inputString, bool eatReturnPacket){
+void MLBridge::EvaluateWithoutMainLoop(const std::string &input, bool eatReturnPacket){
     // This function always circumvents the kernel's Main Loop. Use it for setting $PrePrint for example.
 
-    if(!isConnected()){
+    if(!IsConnected()){
         throw MLBridgeException("Tried to evaluate without being connected to a kernel.");
     }
 
-    //We record the inputString so that we can reference it later, for example, in the event of a syntax error.
+    //We record the input so that we can reference it later, for example, in the event of a syntax error.
     if(continueInput){
-        inputString = this->inputString.append(inputString);
+        inputString.append(input);
         continueInput = false;
     } else{
-        this->inputString = inputString;
+        inputString = input;
     }
     
     //Bypass the kernel's Main Loop.
@@ -345,7 +357,7 @@ void MLBridge::EvaluateWithoutMainLoop(std::string inputString, bool eatReturnPa
     }
 }
 
-void MLBridge::SetPrePrint(std::string preprintfunction){
+void MLBridge::SetPrePrint(const std::string &preprintfunction){
     EvaluateWithoutMainLoop("$PrePrint = " + preprintfunction);
 }
 
@@ -353,7 +365,7 @@ std::string MLBridge::GetKernelVersion() {
     return GetEvaluated("$Version");
 }
 
-std::string MLBridge::GetEvaluated(std::string expression){
+std::string MLBridge::GetEvaluated(const std::string &expression){
     
     EvaluateWithoutMainLoop(expression, false);
     //EvaluateWithoutMainLoop sets running to true, but we get the return string ourselves, so we leaving running = false;
@@ -510,7 +522,7 @@ bool MLBridge::ReceivedDisplayEndPacket(){
 
     //If we want to include our own postscript "post-amble", this is where it would go.
     images.push(*image);
-    image = NULL;
+    image = nullptr;
     makeNewImage = true;
     
     //It is unclear if we still return false when useMainLoop is false.
@@ -750,3 +762,5 @@ void MLBridge::ProcessKernelResponse() {
 
     return;
 }
+
+#pragma clang diagnostic pop

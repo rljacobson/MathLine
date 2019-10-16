@@ -49,7 +49,7 @@ then read the section "Preparing your environment" above.
 
 Option| Description
 ----------------------------|---------------------------
-`  --mainloop arg (=1)`     |Boolean. Whether or not to use the kernel's Main Loop which keeps track of session history with In[#] and Out[#] variables. Defaults to true.
+`  --mainloop arg (=1)`     |Boolean. Whether or not to use the kernel's Main Loop which keeps track of session history with `In[#]` and `Out[#]` variables. Defaults to true.
   `--prompt arg `           |String. The prompt presented to the user for input. When inoutstrings is true, this is typically the empty string.
   `--inoutstrings arg (=1)` |Boolean. Whether or not to print the `In[#]:=` and `Out[#]=` strings. When mainloop is false this option does nothing. Defaults to true.
   `--linkname arg`          |String. The call string to set up the link. The default works on *nix systems on which math is in the path and runnable. Defaults to `"math -wstp"`.
