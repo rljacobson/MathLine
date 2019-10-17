@@ -3,7 +3,7 @@
 # See the FindMathematica manual for usage hints.
 #
 #=============================================================================
-# Copyright 2010-2016 Sascha Kratky
+# Copyright 2010-2019 Sascha Kratky
 #
 # Permission is hereby granted, free of charge, to any person)
 # obtaining a copy of this software and associated documentation)
@@ -34,7 +34,7 @@ cmake_minimum_required(VERSION 2.8.12)
 cmake_policy(POP)
 
 set (Mathematica_CMAKE_MODULE_DIR "${CMAKE_CURRENT_LIST_DIR}")
-set (Mathematica_CMAKE_MODULE_VERSION "3.2.2")
+set (Mathematica_CMAKE_MODULE_VERSION "3.2.5")
 
 # activate select policies
 if (POLICY CMP0025)
@@ -244,7 +244,10 @@ macro (_get_program_names _outProgramNames)
 	# Mathematica products in order of preference
 	set (_MathematicaApps "Mathematica" "gridMathematica Server")
 	# Mathematica product versions in order of preference
-	set (_MathematicaVersions "11.0" "10.4" "10.3" "10.2" "10.1" "10.0" "9.0" "8.0" "7.0" "6.0" "5.2")
+	set (_MathematicaVersions
+		"12.0" "11.3" "11.2" "11.1" "11.0"
+		"10.4" "10.3" "10.2" "10.1" "10.0"
+		"9.0" "8.0" "7.0" "6.0" "5.2")
 	# search for explicitly requested application version first
 	if (Mathematica_FIND_VERSION AND Mathematica_FIND_VERSION_EXACT)
 		foreach (_product IN LISTS _MathematicaApps)
@@ -355,7 +358,7 @@ function (_add_launch_services_search_paths _outSearchPaths)
 		foreach (_bundleID IN ITEMS ${ARGN})
 			execute_process(
 				COMMAND "${Mathematica_LSRegister_EXECUTABLE}" "-dump"
-				COMMAND "grep" "--before-context=5" "--after-context=5" " ${_bundleID} "
+				COMMAND "grep" "--before-context=20" "--after-context=20" " ${_bundleID} "
 				COMMAND "grep" "--only-matching" "/.*\\.app"
 				TIMEOUT 10 OUTPUT_VARIABLE _queryResult ERROR_QUIET)
 			string (REPLACE ";" "\\;" _queryResult "${_queryResult}")
@@ -364,6 +367,8 @@ function (_add_launch_services_search_paths _outSearchPaths)
 				# put paths into canonical order
 				list (SORT _appPaths)
 				list (REVERSE _appPaths)
+			else()
+				message (STATUS "No Mathematica apps registered in Mac OS X LaunchServices database.")
 			endif()
 			if (Mathematica_DEBUG)
 				message (STATUS "Mac OS X LaunchServices database registered apps=${_appPaths}")
@@ -752,7 +757,14 @@ macro (_get_compatible_system_IDs _systemID _outSystemIDs)
 			list (APPEND ${_outSystemIDs} ${_systemID})
 		endif()
 		# Linux 64-bit can run x86 through ia32-libs package
-		list (APPEND ${_outSystemIDs} "Linux")
+		if (Mathematica_VERSION)
+			if ("${Mathematica_VERSION}" VERSION_LESS "11.3")
+				# Mathematica 11.3 dropped support for 32-bit Linux
+				list (APPEND ${_outSystemIDs} "Linux")
+			endif()
+		else()
+			list (APPEND ${_outSystemIDs} "Linux")
+		endif()
 	else()
 		list (APPEND ${_outSystemIDs} ${_systemID})
 	endif()
@@ -1071,11 +1083,20 @@ macro (_append_mathlink_needed_system_libraries _outLibraries)
 			endif()
 		endif()
 		if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-			list (APPEND ${_outLibraries} m pthread rt )
+			list (APPEND ${_outLibraries} m)
+			set (CMAKE_THREAD_PREFER_PTHREAD TRUE)
+			find_package(Threads REQUIRED)
+			list (APPEND ${_outLibraries} "${CMAKE_THREAD_LIBS_INIT}")
+			find_library(Mathematica_rt_LIBRARY rt)
+			mark_as_advanced(Mathematica_rt_LIBRARY)
+			list (APPEND ${_outLibraries} ${Mathematica_rt_LIBRARY})
 			if (DEFINED Mathematica_MathLink_VERSION_MINOR)
 				if ("${Mathematica_MathLink_VERSION_MINOR}" GREATER 24)
 					# Linux MathLink API revision >= 25 has dependency on libdl and libuuid
-					list (APPEND ${_outLibraries} dl uuid)
+					list (APPEND ${_outLibraries} ${CMAKE_DL_LIBS})
+					find_library (Mathematica_uuid_LIBRARY uuid)
+					mark_as_advanced(Mathematica_uuid_LIBRARY)
+					list (APPEND ${_outLibraries} ${Mathematica_uuid_LIBRARY})
 				endif()
 			endif()
 		elseif (CMAKE_SYSTEM_NAME STREQUAL "SunOS")
@@ -1293,7 +1314,8 @@ macro (_setup_mathematica_base_directory)
 	else ()
 		# guess Mathematica_BASE_DIR from environment
 		# environment variable MATHEMATICA_BASE may override default
-		# $BaseDirectory, see http://reference.wolfram.com/language/tutorial/ConfigurationFiles.html
+		# $BaseDirectory, see
+		# https://reference.wolfram.com/language/tutorial/ConfigurationFiles.html
 		if (DEFINED ENV{MATHEMATICA_BASE})
 			set (Mathematica_BASE_DIR "$ENV{MATHEMATICA_BASE}")
 		elseif (CMAKE_HOST_WIN32 OR CYGWIN)
@@ -1344,7 +1366,8 @@ macro (_setup_mathematica_userbase_directory)
 	else ()
 		# guess Mathematica_USERBASE_DIR from environment
 		# environment variable MATHEMATICA_USERBASE may override default
-		# $UserBaseDirectory, see http://reference.wolfram.com/language/tutorial/ConfigurationFiles.html
+		# $UserBaseDirectory, see
+		# https://reference.wolfram.com/language/tutorial/ConfigurationFiles.html
 		if (DEFINED ENV{MATHEMATICA_USERBASE})
 			set (Mathematica_USERBASE_DIR "$ENV{MATHEMATICA_USERBASE}")
 		elseif (CMAKE_HOST_WIN32 OR CYGWIN)
@@ -1441,6 +1464,7 @@ macro (_find_mathematica)
 		if (Mathematica_DEBUG)
 			message (STATUS "SearchPaths ${_SearchPaths}")
 			message (STATUS "ProgramNames ${_ProgramNames}")
+			message (STATUS "KernelExecutables ${_KernelExecutables}")
 		endif()
 		find_path (Mathematica_HOST_ROOT_DIR
 			NAMES ${_KernelExecutables}
@@ -1922,51 +1946,54 @@ macro (_setup_package_version_variables _packageName)
 			list(GET _versionComponents 3 ${_packageName}_VERSION_TWEAK)
 		endif()
 		set (${_packageName}_VERSION_COUNT ${_len})
-	else()
-		set (${_packageName}_VERSION_COUNT 0)
-		set (${_packageName}_VERSION "")
-	endif()
-	if (NOT DEFINED ${_packageName}_VERSION_STRING)
-		set (${_packageName}_VERSION_STRING ${${_packageName}_VERSION})
+		if (NOT DEFINED ${_packageName}_VERSION_STRING)
+			set (${_packageName}_VERSION_STRING ${${_packageName}_VERSION})
+		endif()
 	endif()
 endmacro()
 
 # internal macro to setup Mathematica version related variables
 macro (_setup_mathematica_version_variables)
 	if (NOT Mathematica_VERSION)
-		if (Mathematica_ROOT_DIR AND
-			EXISTS "${Mathematica_ROOT_DIR}/.VersionID")
-			# parse version number from hidden VersionID and PatchLevel files
-			file (STRINGS "${Mathematica_ROOT_DIR}/.VersionID" _versionLine)
-			if (EXISTS "${Mathematica_ROOT_DIR}/.PatchLevel")
-				file (STRINGS "${Mathematica_ROOT_DIR}/.PatchLevel" _patchLevel)
-				if (_versionLine MATCHES ".+" AND _patchLevel MATCHES ".+")
-					set (_versionLine "${_versionLine}.${_patchLevel}")
+		set (_versionLine "")
+		if (DEFINED Mathematica_ROOT_DIR)
+			if (Mathematica_ROOT_DIR AND EXISTS "${Mathematica_ROOT_DIR}/.VersionID")
+				# parse version number from hidden VersionID and PatchLevel files
+				file (STRINGS "${Mathematica_ROOT_DIR}/.VersionID" _versionLine)
+				if (EXISTS "${Mathematica_ROOT_DIR}/.PatchLevel")
+					file (STRINGS "${Mathematica_ROOT_DIR}/.PatchLevel" _patchLevel)
+					if (_versionLine MATCHES ".+" AND _patchLevel MATCHES ".+")
+						set (_versionLine "${_versionLine}.${_patchLevel}")
+					endif()
+				endif()
+			elseif (CMAKE_HOST_APPLE AND Mathematica_ROOT_DIR AND
+				EXISTS "${Mathematica_ROOT_DIR}/Contents/Info.plist")
+				execute_process(
+					COMMAND "grep" "--after-context=1" "CFBundleShortVersionString"
+					"${Mathematica_ROOT_DIR}/Contents/Info.plist"
+					TIMEOUT 10 OUTPUT_VARIABLE _versionStr ERROR_QUIET)
+				if (_versionStr MATCHES "<string>([0-9]+\\.[0-9]+\\.[0-9]+)")
+					set (_versionLine "${CMAKE_MATCH_1}")
+				else()
+					set (_versionLine "")
 				endif()
 			endif()
-		elseif (CMAKE_HOST_APPLE AND Mathematica_ROOT_DIR AND
-			EXISTS "${Mathematica_ROOT_DIR}/Contents/Info.plist")
-			execute_process(
-				COMMAND "grep" "--after-context=1" "CFBundleShortVersionString"
-					"${Mathematica_ROOT_DIR}/Contents/Info.plist"
-				TIMEOUT 10 OUTPUT_VARIABLE _versionStr ERROR_QUIET)
-			if (_versionStr MATCHES "<string>([0-9]+\\.[0-9]+\\.[0-9]+)")
-				set (_versionLine "${CMAKE_MATCH_1}")
-			else()
-				set (_versionLine "")
+		endif()
+		if (NOT _versionLine AND DEFINED Mathematica_MathLink_INCLUDE_DIR)
+			if (Mathematica_MathLink_INCLUDE_DIR AND
+				EXISTS "${Mathematica_MathLink_INCLUDE_DIR}/mathlink.h")
+				# parse version number from mathlink.h
+				file (STRINGS "${Mathematica_MathLink_INCLUDE_DIR}/mathlink.h" _versionLine
+					REGEX ".*define.*MLMATHVERSION.*")
 			endif()
-		elseif (Mathematica_MathLink_INCLUDE_DIR AND
-			EXISTS "${Mathematica_MathLink_INCLUDE_DIR}/mathlink.h")
-			# parse version number from mathlink.h
-			file (STRINGS "${Mathematica_MathLink_INCLUDE_DIR}/mathlink.h" _versionLine
-				REGEX ".*define.*MLMATHVERSION.*")
-		elseif (Mathematica_MathLink_HOST_INCLUDE_DIR AND
-			EXISTS "${Mathematica_MathLink_HOST_INCLUDE_DIR}/mathlink.h")
-			# parse version number from mathlink.h
-			file (STRINGS "${Mathematica_MathLink_HOST_INCLUDE_DIR}/mathlink.h" _versionLine
-				REGEX ".*define.*MLMATHVERSION.*")
-		else()
-			set (_versionLine "")
+		endif()
+		if (NOT _versionLine AND DEFINED Mathematica_MathLink_HOST_INCLUDE_DIR)
+			if (Mathematica_MathLink_HOST_INCLUDE_DIR AND
+				EXISTS "${Mathematica_MathLink_HOST_INCLUDE_DIR}/mathlink.h")
+				# parse version number from mathlink.h
+				file (STRINGS "${Mathematica_MathLink_HOST_INCLUDE_DIR}/mathlink.h" _versionLine
+					REGEX ".*define.*MLMATHVERSION.*")
+			endif()
 		endif()
 		if (_versionLine MATCHES ".+")
 			string (REGEX REPLACE "[^0-9]*([0-9]+(\\.[0-9]+)*).*" "\\1" _versionStr "${_versionLine}")
@@ -1981,7 +2008,7 @@ endmacro()
 
 # internal macro to setup WolframLibrary version related variables
 macro (_setup_wolframlibrary_version_variables)
-	if (NOT Mathematica_WolframLibrary_VERSION)
+	if (NOT Mathematica_WolframLibrary_VERSION AND Mathematica_WolframLibrary_INCLUDE_DIR)
 		set (_file "${Mathematica_WolframLibrary_INCLUDE_DIR}/WolframLibrary.h")
 		if (EXISTS "${_file}")
 			file (STRINGS "${_file}" _versionLine REGEX ".*define.*WolframLibraryVersion.*")
@@ -1999,7 +2026,7 @@ endmacro()
 
 # internal macro to setup MathLink version related variables
 macro (_setup_mathlink_version_variables)
-	if (NOT Mathematica_MathLink_VERSION)
+	if (NOT Mathematica_MathLink_VERSION AND Mathematica_MathLink_INCLUDE_DIR)
 		set (_file "${Mathematica_MathLink_INCLUDE_DIR}/mathlink.h")
 		if (EXISTS "${_file}")
 			if (DEFINED Mathematica_MathLink_FIND_VERSION_MAJOR)
@@ -2024,17 +2051,19 @@ endmacro()
 
 # internal macro to setup WSTP version related variables
 macro (_setup_WSTP_version_variables)
-	if (NOT Mathematica_WSTP_VERSION)
+	if (NOT Mathematica_WSTP_VERSION AND Mathematica_WSTP_INCLUDE_DIR)
 		set (_file "${Mathematica_WSTP_INCLUDE_DIR}/wstp.h")
 		if (EXISTS "${_file}")
 			if (DEFINED Mathematica_WSTP_FIND_VERSION_MAJOR)
 				set (_wstpInterface "${Mathematica_WSTP_FIND_VERSION_MAJOR}")
 			else()
-				file (STRINGS "${_file}" _wstpInterfaceLine REGEX ".*define.*WSINTERFACE.*")
-				string (REGEX REPLACE "[^0-9]*([0-9]+).*" "\\1" _wstpInterface
-					${_wstpInterfaceLine})
+				file (STRINGS "${_file}" _wstpInterfaceLine REGEX ".*define.*(WS|ML)INTERFACE.*")
+				if (_wstpInterfaceLine)
+					string (REGEX REPLACE "[^0-9]*([0-9]+).*" "\\1" _wstpInterface
+						${_wstpInterfaceLine})
+				endif()
 			endif()
-			file (STRINGS "${_file}" _wstpRevisionLine REGEX ".*define.*WSREVISION.*")
+			file (STRINGS "${_file}" _wstpRevisionLine REGEX ".*define.*(WS|ML)REVISION.*")
 			string (REGEX REPLACE "[^0-9]*([0-9]+).*" "\\1" _wstpRevision
 				${_wstpRevisionLine})
 			if (DEFINED _wstpInterface AND DEFINED _wstpRevision)
@@ -2049,7 +2078,7 @@ endmacro()
 
 # internal macro to setup J/Link version related variables
 macro (_setup_jlink_version_variables)
-	if (NOT Mathematica_JLink_VERSION)
+	if (NOT Mathematica_JLink_VERSION AND Mathematica_JLink_PACKAGE_DIR)
 		set (_file "${Mathematica_JLink_PACKAGE_DIR}/Source/Java/com/wolfram/jlink/KernelLink.java")
 		if (EXISTS "${_file}")
 			file (STRINGS "${_file}" _versionLine REGEX ".*String.*VERSION.*")
@@ -2065,7 +2094,7 @@ endmacro()
 
 # internal macro to setup MUnit version related variables
 macro (_setup_munit_package_version_variables)
-	if (NOT Mathematica_MUnit_VERSION)
+	if (NOT Mathematica_MUnit_VERSION AND Mathematica_MUnit_PACKAGE_FILE)
 		set (_file "${Mathematica_MUnit_PACKAGE_FILE}")
 		if (EXISTS "${_file}")
 			file (STRINGS "${_file}" _mUnitVersionNumberLine REGEX ".*`\\$VersionNumber.*")
@@ -2088,11 +2117,15 @@ endmacro()
 # internal macro to setup WolframLibrary library related variables
 macro (_setup_wolframlibrary_library_variables)
 	if (Mathematica_WolframLibrary_LIBRARY)
+		set (Mathematica_WolframLibrary_RUNTIME_LIBRARY_DIRS "")
+		set (Mathematica_WolframLibrary_RUNTIME_LIBRARY_DIRS_DEBUG "")
 		_setup_libraries_var(Mathematica_WolframLibrary_LIBRARY Mathematica_WolframLibrary_LIBRARIES)
 		foreach (_library ${Mathematica_WolframLibrary_LIBRARIES})
 			get_filename_component (_libraryDir ${_library} DIRECTORY)
 			list (APPEND Mathematica_LIBRARY_DIRS ${_libraryDir})
 			if (NOT Mathematica_USE_STATIC_LIBRARIES)
+				list (APPEND Mathematica_WolframLibrary_RUNTIME_LIBRARY_DIRS ${_libraryDir})
+				list (APPEND Mathematica_WolframLibrary_RUNTIME_LIBRARY_DIRS_DEBUG ${_libraryDir})
 				list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS ${_libraryDir})
 				list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS_DEBUG ${_libraryDir})
 			endif()
@@ -2104,6 +2137,8 @@ macro (_setup_wolframlibrary_library_variables)
 				if (EXISTS "${_kernelBinariesDir}")
 					list (APPEND Mathematica_LIBRARY_DIRS ${_kernelBinariesDir})
 					if (NOT Mathematica_USE_STATIC_LIBRARIES)
+						list (APPEND Mathematica_WolframLibrary_RUNTIME_LIBRARY_DIRS "${_kernelBinariesDir}")
+						list (APPEND Mathematica_WolframLibrary_RUNTIME_LIBRARY_DIRS_DEBUG "${_kernelBinariesDir}")
 						list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS "${_kernelBinariesDir}")
 						list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS_DEBUG "${_kernelBinariesDir}")
 					endif()
@@ -2111,6 +2146,8 @@ macro (_setup_wolframlibrary_library_variables)
 			endforeach()
 		endif()
 		_append_wolframlibrary_needed_system_libraries(Mathematica_WolframLibrary_LIBRARIES)
+		list (REMOVE_DUPLICATES Mathematica_WolframLibrary_RUNTIME_LIBRARY_DIRS)
+		list (REMOVE_DUPLICATES Mathematica_WolframLibrary_RUNTIME_LIBRARY_DIRS_DEBUG)
 		list (APPEND Mathematica_LIBRARIES ${Mathematica_WolframLibrary_LIBRARIES})
 	endif()
 endmacro()
@@ -2126,6 +2163,8 @@ macro (_setup_mathlink_library_variables)
 		else()
 			set (Mathematica_MathLink_DEFINITIONS "")
 		endif()
+		set (Mathematica_MathLink_RUNTIME_LIBRARY_DIRS "")
+		set (Mathematica_MathLink_RUNTIME_LIBRARY_DIRS_DEBUG "")
 		if (APPLE)
 			set (Mathematica_MathLink_LINKER_FLAGS "")
 			foreach (_library ${Mathematica_MathLink_LIBRARIES})
@@ -2140,6 +2179,8 @@ macro (_setup_mathlink_library_variables)
 				set (_CompilerAdditions "${Mathematica_MathLink_ROOT_DIR}/CompilerAdditions")
 			endif()
 			if (IS_DIRECTORY "${_CompilerAdditions}")
+				list (APPEND Mathematica_MathLink_RUNTIME_LIBRARY_DIRS "${_CompilerAdditions}")
+				list (APPEND Mathematica_MathLink_RUNTIME_LIBRARY_DIRS_DEBUG "${_CompilerAdditions}")
 				list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS "${_CompilerAdditions}")
 				list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS_DEBUG "${_CompilerAdditions}")
 			endif()
@@ -2149,6 +2190,8 @@ macro (_setup_mathlink_library_variables)
 				get_filename_component (_libraryDir ${_library} DIRECTORY)
 				list (APPEND Mathematica_LIBRARY_DIRS ${_libraryDir})
 				if (NOT Mathematica_USE_STATIC_LIBRARIES)
+					list (APPEND Mathematica_MathLink_RUNTIME_LIBRARY_DIRS ${_libraryDir})
+					list (APPEND Mathematica_MathLink_RUNTIME_LIBRARY_DIRS_DEBUG ${_libraryDir})
 					list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS ${_libraryDir})
 					list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS_DEBUG ${_libraryDir})
 				endif()
@@ -2162,15 +2205,19 @@ macro (_setup_mathlink_library_variables)
 			# Windows MathLink SDK has runtime DLLs in a separate directory
 			set (_runtimeDir "${Mathematica_MathLink_ROOT_DIR}/SystemAdditions")
 			if (IS_DIRECTORY "${_runtimeDir}")
+				list (APPEND Mathematica_MathLink_RUNTIME_LIBRARY_DIRS "${_runtimeDir}")
 				list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS "${_runtimeDir}")
 			endif()
 			# Windows MathLink SDK also ships with debug DLLs in AlternativeComponents
 			set (_runtimeDir "${Mathematica_MathLink_ROOT_DIR}/AlternativeComponents/DebugLibraries")
 			if (IS_DIRECTORY "${_runtimeDir}")
+				list (APPEND Mathematica_MathLink_RUNTIME_LIBRARY_DIRS_DEBUG "${_runtimeDir}")
 				list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS_DEBUG "${_runtimeDir}")
 			endif()
 		endif()
 		_append_mathlink_needed_system_libraries(Mathematica_MathLink_LIBRARIES)
+		list (REMOVE_DUPLICATES Mathematica_MathLink_RUNTIME_LIBRARY_DIRS)
+		list (REMOVE_DUPLICATES Mathematica_MathLink_RUNTIME_LIBRARY_DIRS_DEBUG)
 		list (APPEND Mathematica_LIBRARIES ${Mathematica_MathLink_LIBRARIES})
 	endif()
 endmacro()
@@ -2186,6 +2233,8 @@ macro (_setup_WSTP_library_variables)
 		else()
 			set (Mathematica_WSTP_DEFINITIONS "")
 		endif()
+		set (Mathematica_WSTP_RUNTIME_LIBRARY_DIRS "")
+		set (Mathematica_WSTP_RUNTIME_LIBRARY_DIRS_DEBUG "")
 		if (APPLE)
 			set (Mathematica_WSTP_LINKER_FLAGS "")
 			foreach (_library ${Mathematica_WSTP_LIBRARIES})
@@ -2200,6 +2249,8 @@ macro (_setup_WSTP_library_variables)
 				set (_CompilerAdditions "${Mathematica_WSTP_ROOT_DIR}/CompilerAdditions")
 			endif()
 			if (IS_DIRECTORY "${_CompilerAdditions}")
+				list (APPEND Mathematica_WSTP_RUNTIME_LIBRARY_DIRS ${_libraryDir})
+				list (APPEND Mathematica_WSTP_RUNTIME_LIBRARY_DIRS_DEBUG ${_libraryDir})
 				list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS "${_CompilerAdditions}")
 				list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS_DEBUG "${_CompilerAdditions}")
 			endif()
@@ -2209,6 +2260,8 @@ macro (_setup_WSTP_library_variables)
 				get_filename_component (_libraryDir ${_library} DIRECTORY)
 				list (APPEND Mathematica_LIBRARY_DIRS ${_libraryDir})
 				if (NOT Mathematica_USE_STATIC_LIBRARIES)
+					list (APPEND Mathematica_WSTP_RUNTIME_LIBRARY_DIRS ${_libraryDir})
+					list (APPEND MathematicaWSTP_RUNTIME_LIBRARY_DIRS_DEBUG ${_libraryDir})
 					list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS ${_libraryDir})
 					list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS_DEBUG ${_libraryDir})
 				endif()
@@ -2222,15 +2275,19 @@ macro (_setup_WSTP_library_variables)
 			# Windows WSTP SDK has runtime DLLs in a separate directory
 			set (_runtimeDir "${Mathematica_WSTP_ROOT_DIR}/SystemAdditions")
 			if (IS_DIRECTORY "${_runtimeDir}")
+				list (APPEND Mathematica_WSTP_RUNTIME_LIBRARY_DIRS "${_runtimeDir}")
 				list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS "${_runtimeDir}")
 			endif()
 			# Windows WSTP SDK also ships with debug DLLs in AlternativeComponents
 			set (_runtimeDir "${Mathematica_WSTP_ROOT_DIR}/AlternativeComponents/DebugLibraries")
 			if (IS_DIRECTORY "${_runtimeDir}")
+				list (APPEND Mathematica_WSTP_RUNTIME_LIBRARY_DIRS_DEBUG "${_runtimeDir}")
 				list (APPEND Mathematica_RUNTIME_LIBRARY_DIRS_DEBUG "${_runtimeDir}")
 			endif()
 		endif()
 		_append_WSTP_needed_system_libraries(Mathematica_WSTP_LIBRARIES)
+		list (REMOVE_DUPLICATES Mathematica_WSTP_RUNTIME_LIBRARY_DIRS)
+		list (REMOVE_DUPLICATES Mathematica_WSTP_RUNTIME_LIBRARY_DIRS_DEBUG)
 		list (APPEND Mathematica_LIBRARIES ${Mathematica_WSTP_LIBRARIES})
 	endif()
 endmacro()
@@ -2301,6 +2358,8 @@ macro (_log_found_variables)
 			message (STATUS "WolframLibrary include dir ${Mathematica_WolframLibrary_INCLUDE_DIR}")
 			message (STATUS "WolframLibrary library ${Mathematica_WolframLibrary_LIBRARY}")
 			message (STATUS "WolframLibrary libraries ${Mathematica_WolframLibrary_LIBRARIES}")
+			message (STATUS "WolframLibrary runtime library dirs ${Mathematica_WolframLibrary_RUNTIME_LIBRARY_DIRS}")
+			message (STATUS "WolframLibrary runtime debug library dirs ${Mathematica_WolframLibrary_RUNTIME_LIBRARY_DIRS_DEBUG}")
 			message (STATUS "LibraryLink package dir ${Mathematica_LibraryLink_PACKAGE_DIR}")
 		else()
 			message (STATUS "WolframLibrary not found")
@@ -2315,6 +2374,8 @@ macro (_log_found_variables)
 			message (STATUS "MathLink mprep executable ${Mathematica_MathLink_MPREP_EXECUTABLE}")
 			message (STATUS "MathLink definitions ${Mathematica_MathLink_DEFINITIONS}")
 			message (STATUS "MathLink linker flags ${Mathematica_MathLink_LINKER_FLAGS}")
+			message (STATUS "MathLink runtime library dirs ${Mathematica_MathLink_RUNTIME_LIBRARY_DIRS}")
+			message (STATUS "MathLink runtime debug library dirs ${Mathematica_MathLink_RUNTIME_LIBRARY_DIRS_DEBUG}")
 		else()
 			message (STATUS "MathLink not found")
 		endif()
@@ -2328,6 +2389,8 @@ macro (_log_found_variables)
 			message (STATUS "WSTP wsprep executable ${Mathematica_WSTP_WSPREP_EXECUTABLE}")
 			message (STATUS "WSTP definitions ${Mathematica_WSTP_DEFINITIONS}")
 			message (STATUS "WSTP linker flags ${Mathematica_WSTP_LINKER_FLAGS}")
+			message (STATUS "WSTP runtime library dirs ${Mathematica_WSTP_RUNTIME_LIBRARY_DIRS}")
+			message (STATUS "WSTP runtime debug library dirs ${Mathematica_WSTP_RUNTIME_LIBRARY_DIRS_DEBUG}")
 		else()
 			message (STATUS "WSTP not found")
 		endif()
@@ -3091,7 +3154,7 @@ macro (_add_script_or_code _cmdVar _scriptVar _codeVar)
 			# using the -script option does not work as expected, if it is preceded by multiple inline
 			# Mathematica commands using the -run option.
 			# Thus we use the Get function instead, which should work with all versions.
-			# According to http://reference.wolfram.com/language/tutorial/WolframLanguageScripts.html
+			# According to https://reference.wolfram.com/language/tutorial/WolframLanguageScripts.html
 			# running the kernel with the -script option is equivalent to reading the file using the Get function
 			# with a single difference: after the last command in the file is evaluated, the kernel terminates
 			Mathematica_TO_NATIVE_PATH("${_scriptFileAbs}" _scriptFileMma)
@@ -3188,9 +3251,10 @@ function (Mathematica_EXECUTE)
 	execute_process (${_cmd})
 	# put result to cache
 	if (_option_OUTPUT_VARIABLE)
-		# if Mathematica is not registered properly, exit with a fatal error
+		# if Mathematica is not registered properly, print a warning
 		if ("${${_option_OUTPUT_VARIABLE}}" MATCHES "Mathematica cannot find a valid password")
-			message (FATAL_ERROR "${${_option_OUTPUT_VARIABLE}}")
+			message (WARNING "${${_option_OUTPUT_VARIABLE}}")
+			return()
 		endif()
 	endif()
 	if (_option_CACHE AND _option_OUTPUT_VARIABLE)
@@ -3496,11 +3560,10 @@ function (Mathematica_FIND_PACKAGE _var _packageName)
 	endif()
 	# determine MUnit package directory
 	Mathematica_TO_NATIVE_STRING("${_packageName}" _packageNameMma)
+	# default to using FileNames function
+	set (_findPackage "Print[StandardForm[Check[First[FileNames[ContextToFileName[${_packageNameMma}],$Path]],$Failed]]]")
 	if (DEFINED Mathematica_VERSION)
-		if ("${Mathematica_VERSION}" VERSION_LESS "7.0")
-			# default to using FileNames function
-			set (_findPackage "Print[StandardForm[Check[First[FileNames[ContextToFileName[${_packageNameMma}],$Path]],$Failed]]]")
-		else()
+		if (NOT "${Mathematica_VERSION}" VERSION_LESS "7.0")
 			# function FindFile available since Mathematica 7
 			set (_findPackage "Print[StandardForm[FindFile[${_packageNameMma}]]]")
 		endif()

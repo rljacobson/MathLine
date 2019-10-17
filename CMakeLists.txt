@@ -1,8 +1,8 @@
 # Create the project.
 cmake_minimum_required(VERSION 2.6)
 project(mathline)
-add_executable(mathline ${CMAKE_SOURCE_DIR}/src/main.cpp ${CMAKE_SOURCE_DIR}/src/mlbridge.cpp ${CMAKE_SOURCE_DIR}/src/linenoise.c)
-include_directories("${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/build")
+add_executable(mathline ${CMAKE_SOURCE_DIR}/src/main.cpp ${CMAKE_SOURCE_DIR}/src/mlbridge.cpp)
+include_directories("${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/dep/linenoise-ng/include" "${CMAKE_SOURCE_DIR}/build")
 
 # Enable C++11 extensions.
 target_compile_features(mathline PRIVATE cxx_constexpr)
@@ -35,6 +35,10 @@ elseif(Mathematica_MathLink_FOUND)
 	target_link_libraries(mathline ${Mathematica_MathLink_LIBRARY})
 endif()
 
+# Compile linenose-ng library and link to it
+add_subdirectory(dep/linenoise-ng)
+target_link_libraries(mathline linenoise)
+
 # Link to the correct stdlib.
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 	# We're on macOS X.
@@ -46,6 +50,9 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 		# Using GCC. MathLink requires additional libraries.
 		target_link_libraries(mathline m pthread c++ dl)
 	endif()
+elseif(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
+	# We're on Microsoft Windows.
+
 else()
 	# The libuuid library is special. On (at least) Ubuntu libuuid.so isn't
 	# symlinked to libuuid.so.1 if libuuid-dev isn't installed, so ld can't
